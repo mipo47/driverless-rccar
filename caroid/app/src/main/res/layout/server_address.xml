@@ -16,6 +16,7 @@
 
     <EditText
         android:id="@+id/ip_edit"
+        android:text="@string/default_ip"
         android:layout_height="wrap_content"
         android:layout_width="match_parent"
         android:layout_marginLeft="20dip"
@@ -38,6 +39,7 @@
 
     <EditText
         android:id="@+id/port_edit"
+        android:text="@string/default_port"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="20dip"

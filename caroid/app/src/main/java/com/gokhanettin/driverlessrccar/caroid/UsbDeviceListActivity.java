@@ -1,10 +1,10 @@
 package com.gokhanettin.driverlessrccar.caroid;
 
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
+import android.content.Context;
 import android.content.Intent;
-import android.support.v7.app.AppCompatActivity;
+import android.hardware.usb.UsbManager;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
@@ -13,28 +13,29 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.util.ArrayList;
-import java.util.Set;
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialPort;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
 
-public class DeviceListActivity extends AppCompatActivity {
+import java.util.ArrayList;
+import java.util.List;
+
+public class UsbDeviceListActivity extends AppCompatActivity {
     public static final String TAG = "DeviceListActivity";
     public static final String EXTRA_BT_ADDRESS = "device_bt_address";
     private static final int REQUEST_ENABLE_BT = 0;
-    private BluetoothAdapter mBluetoothAdapter = null;
+    private UsbManager mUsbManager = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_bluetooth_device_list);
 
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if(mBluetoothAdapter == null) {
+        mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        if(mUsbManager == null) {
             Toast.makeText(getApplicationContext(),
-                    "Bluetooth is not available", Toast.LENGTH_LONG).show();
+                    "Usb is not available", Toast.LENGTH_LONG).show();
             finish();
-        } else if (!mBluetoothAdapter.isEnabled()) {
-            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
         } else {
             populatePairedDeviceList();
         }
@@ -55,14 +56,26 @@ public class DeviceListActivity extends AppCompatActivity {
     }
 
     private void populatePairedDeviceList() {
+        Log.d(TAG, "Refreshing device list ...");
+
+        final List<UsbSerialDriver> drivers =
+                UsbSerialProber.getDefaultProber().findAllDrivers(mUsbManager);
+
+        final List<UsbSerialPort> pairedDevices = new ArrayList<UsbSerialPort>();
+        for (final UsbSerialDriver driver : drivers) {
+            final List<UsbSerialPort> ports = driver.getPorts();
+            Log.d(TAG, String.format("+ %s: %s port%s",
+                    driver, Integer.valueOf(ports.size()), ports.size() == 1 ? "" : "s"));
+            pairedDevices.addAll(ports);
+        }
+
         final ListView listViewPairedDevices =
                 (ListView) findViewById(R.id.list_view_paired_devices);
-        Set<BluetoothDevice> pairedDevices = mBluetoothAdapter.getBondedDevices();
         ArrayList<String> list = new ArrayList<>();
         if (pairedDevices.size() > 0) {
             // There are paired devices.
-            for (BluetoothDevice device : pairedDevices) {
-                list.add(device.getName() + "\n" + device.getAddress());
+            for (UsbSerialPort port : pairedDevices) {
+                list.add("COM" + port.getPortNumber());
             }
 
             final ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
@@ -72,8 +85,7 @@ public class DeviceListActivity extends AppCompatActivity {
             listViewPairedDevices.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
                 public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                    String info = ((TextView) view).getText().toString();
-                    String address = info.substring(info.length() - 17);
+                    String address = ((TextView) view).getText().toString();
                     Intent data = new Intent();
                     data.putExtra(EXTRA_BT_ADDRESS, address);
                     setResult(RESULT_OK, data);
@@ -82,7 +94,7 @@ public class DeviceListActivity extends AppCompatActivity {
             });
         } else {
             Toast.makeText(getApplicationContext(),
-                    "No Paired Bluetooth Device Found.", Toast.LENGTH_LONG).show();
+                    "No Connected USB Device Found.", Toast.LENGTH_LONG).show();
             finish();
         }
     }

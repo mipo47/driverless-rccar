@@ -11,27 +11,27 @@ abstract class BluetoothHandlerCallback implements Handler.Callback {
     @Override
     public boolean handleMessage(Message msg) {
         switch (msg.what) {
-            case BluetoothClient.MESSAGE_CONNECTION_STATE_CHANGE:
+            case UsbClient.MESSAGE_CONNECTION_STATE_CHANGE:
                 onConnectionStateChanged(msg.arg1);
                 break;
-            case BluetoothClient.MESSAGE_RECEIVE:
-                BluetoothClient.Input in = (BluetoothClient.Input) msg.obj;
+            case UsbClient.MESSAGE_RECEIVE:
+                UsbClient.Input in = (UsbClient.Input) msg.obj;
                 onReceived(in.speedCommand, in.steeringCommand, in.speed, in.steering);
                 break;
-            case BluetoothClient.MESSAGE_SEND:
-                BluetoothClient.Output out = (BluetoothClient.Output) msg.obj;
+            case UsbClient.MESSAGE_SEND:
+                UsbClient.Output out = (UsbClient.Output) msg.obj;
                 onSent(out.speedCommand, out.steeringCommand);
                 break;
-            case BluetoothClient.MESSAGE_COMMUNICATION_MODE_CHANGE:
-                String mode = msg.getData().getString(BluetoothClient.COMMUNICATION_MODE);
+            case UsbClient.MESSAGE_COMMUNICATION_MODE_CHANGE:
+                String mode = msg.getData().getString(UsbClient.COMMUNICATION_MODE);
                 onCommunicationModeChanged(mode);
                 break;
-            case BluetoothClient.MESSAGE_CONNECTION_ESTABLISHED:
-                String deviceName = msg.getData().getString(BluetoothClient.DEVICE_NAME);
+            case UsbClient.MESSAGE_CONNECTION_ESTABLISHED:
+                String deviceName = msg.getData().getString(UsbClient.DEVICE_NAME);
                 onConnectionEstablished(deviceName);
                 break;
-            case BluetoothClient.MESSAGE_CONNECTION_ERROR:
-                String error = msg.getData().getString(BluetoothClient.CONNECTION_ERROR);
+            case UsbClient.MESSAGE_CONNECTION_ERROR:
+                String error = msg.getData().getString(UsbClient.CONNECTION_ERROR);
                 onConnectionError(error);
                 break;
         }

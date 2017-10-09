@@ -1,6 +1,8 @@
 package com.gokhanettin.driverlessrccar.caroid;
 
+import android.content.Context;
 import android.content.Intent;
+import android.hardware.usb.UsbManager;
 import android.os.Handler;
 import android.support.constraint.ConstraintLayout;
 import android.support.v7.app.AppCompatActivity;
@@ -13,6 +15,12 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialPort;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class ArduinoActivity extends AppCompatActivity {
@@ -26,7 +34,7 @@ public class ArduinoActivity extends AppCompatActivity {
     private static final int STEERING_CMD_MAX = (1568 + 530);
     private static final int STEERING_CMD_STEP = 10;
 
-    private BluetoothClient mBluetoothClient = null;
+    private UsbClient mSerialClient = null;
 
     private ConstraintLayout mConstraintLayoutTx;
     private CheckBox mCheckBoxTx;
@@ -67,8 +75,8 @@ public class ArduinoActivity extends AppCompatActivity {
         mSeekBarSteeringCmd.setMax((STEERING_CMD_MAX - STEERING_CMD_MIN)/STEERING_CMD_STEP);
         mSeekBarSpeedCmd.setOnSeekBarChangeListener(mSpeedCmdChangeListener);
         mSeekBarSteeringCmd.setOnSeekBarChangeListener(mSteeringCmdChangeListener);
-        mBluetoothClient = new BluetoothClient(mHandler);
-        Intent intent = new Intent(ArduinoActivity.this, DeviceListActivity.class);
+        mSerialClient = new UsbClient(mHandler);
+        Intent intent = new Intent(ArduinoActivity.this, UsbDeviceListActivity.class);
         Log.d(TAG, "Asking for BT device address");
         startActivityForResult(intent, REQUEST_BT_ADDRESS);
     }
@@ -76,8 +84,8 @@ public class ArduinoActivity extends AppCompatActivity {
     @Override
     public void onStop() {
         super.onStop();
-        if (mBluetoothClient.getState() != BluetoothClient.STATE_NONE) {
-            mBluetoothClient.disconnect();
+        if (mSerialClient.getState() != UsbClient.STATE_NONE) {
+            mSerialClient.disconnect();
         }
     }
 
@@ -86,9 +94,32 @@ public class ArduinoActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_BT_ADDRESS) {
             if (resultCode == RESULT_OK) {
-                String address = data.getStringExtra(DeviceListActivity.EXTRA_BT_ADDRESS);
-                Log.d(TAG, "Connecting to " + address);
-                mBluetoothClient.connect(address);
+                String address = data.getStringExtra(UsbDeviceListActivity.EXTRA_BT_ADDRESS);
+
+                final UsbManager mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+                final List<UsbSerialDriver> drivers =
+                        UsbSerialProber.getDefaultProber().findAllDrivers(mUsbManager);
+
+                UsbSerialPort selectedPort = null;
+                for (final UsbSerialDriver driver : drivers) {
+                    final List<UsbSerialPort> ports = driver.getPorts();
+                    for (final UsbSerialPort port : ports) {
+                        String portAddress = "COM" + port.getPortNumber();
+                        if (portAddress.equals(address)) {
+                            selectedPort = port;
+                            break;
+                        }
+                    }
+                }
+
+                if (selectedPort != null) {
+                    Log.d(TAG, "Connecting to " + address);
+                    if (!mSerialClient.connect(mUsbManager, selectedPort, this)) {
+                        Log.d(TAG, "Cannot connect to " + address);
+                    }
+                } else {
+                    Log.d(TAG, "Unable to find " + address);
+                }
             } else {
                 finish();
             }
@@ -101,7 +132,7 @@ public class ArduinoActivity extends AppCompatActivity {
                 public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                     if (isChecked) {
                         mConstraintLayoutTx.setVisibility(View.VISIBLE);
-                        mBluetoothClient.requestCommunicationMode(BluetoothClient.MODE_CONTROL);
+                        mSerialClient.requestCommunicationMode(UsbClient.MODE_CONTROL);
                         int speedCmd = (mReceiveSpeedCmd - SPEED_CMD_MIN) / SPEED_CMD_STEP;
                         int steeringCmd = (mReceiveSteeringCmd - STEERING_CMD_MIN) / STEERING_CMD_STEP;
                         mSendSpeedCmd = mReceiveSpeedCmd;
@@ -110,7 +141,7 @@ public class ArduinoActivity extends AppCompatActivity {
                         mSeekBarSteeringCmd.setProgress(steeringCmd);
                     } else {
                         mConstraintLayoutTx.setVisibility(View.INVISIBLE);
-                        mBluetoothClient.requestCommunicationMode(BluetoothClient.MODE_MONITOR);
+                        mSerialClient.requestCommunicationMode(UsbClient.MODE_MONITOR);
                     }
                 }
             };
@@ -161,13 +192,13 @@ public class ArduinoActivity extends AppCompatActivity {
                 protected void onConnectionStateChanged(int newState) {
                     String state = "";
                     switch (newState) {
-                        case BluetoothClient.STATE_NONE:
+                        case UsbClient.STATE_NONE:
                             state = "STATE_NONE";
                             break;
-                        case BluetoothClient.STATE_CONNECTING:
+                        case UsbClient.STATE_CONNECTING:
                             state = "STATE_CONNECTING";
                             break;
-                        case BluetoothClient.STATE_CONNECTED:
+                        case UsbClient.STATE_CONNECTED:
                             state = "STATE_CONNECTED";
                             break;
                     }
@@ -190,7 +221,7 @@ public class ArduinoActivity extends AppCompatActivity {
                     mReceiveSteeringCmd = steeringCmd;
 
                     // Send commands only when we receive data to stay in sync
-                    mBluetoothClient.send(mSendSpeedCmd, mSendSteeringCmd);
+                    mSerialClient.send(mSendSpeedCmd, mSendSteeringCmd);
                 }
 
                 @Override
@@ -210,9 +241,9 @@ public class ArduinoActivity extends AppCompatActivity {
 
                     // Set communication mode when we are connected
                     if (mCheckBoxTx.isChecked()) {
-                        mBluetoothClient.requestCommunicationMode(BluetoothClient.MODE_CONTROL);
+                        mSerialClient.requestCommunicationMode(UsbClient.MODE_CONTROL);
                     } else {
-                        mBluetoothClient.requestCommunicationMode(BluetoothClient.MODE_MONITOR);
+                        mSerialClient.requestCommunicationMode(UsbClient.MODE_MONITOR);
                     }
                 }
 
