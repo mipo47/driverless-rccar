@@ -2,11 +2,17 @@ package com.gokhanettin.driverlessrccar.caroid;
 
 
 import android.content.Context;
+import android.graphics.ImageFormat;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 import android.hardware.Camera;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
@@ -23,6 +29,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private int mMaxFps;
     private final LinkedList<byte[]> mQueue = new LinkedList<>();
     private static final int MAX_QUEUE_SIZE = 2;
+    private static final int BUFFER_COUNT = 4;
 
     public CameraPreview(Context context, Camera camera) {
         super(context);
@@ -33,11 +40,11 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
         Camera.Parameters params = mCamera.getParameters();
         List<Camera.Size> sizes = params.getSupportedPreviewSizes();
-        Camera.Size smallest = sizes.get(0);
+        Camera.Size size = sizes.get(0);
         for (Camera.Size s : sizes) {
             Log.d(TAG, "Supported preview size " + s.width + ", " + s.height);
-            if (smallest.width > s.width) {
-                smallest = s;
+            if (s.width >= 720 && (size.width > s.width || size.height > s.height)) {
+                size = s;
             }
         }
 
@@ -51,8 +58,13 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                 mMaxFps = mx;
             }
         }
-        params.setPreviewSize(smallest.width, smallest.height); // Smaller is better
+        params.setPreviewSize(size.width, size.height); // Smaller is better
         params.setPreviewFpsRange(mMaxFps, mMaxFps);
+        params.setRecordingHint(true);
+
+//        if (params.isAutoExposureLockSupported() )
+//            params.setAutoExposureLock(true);
+
         mCamera.setParameters(params);
 
         mPreviewSize = mCamera.getParameters().getPreviewSize();
@@ -97,7 +109,10 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
         // start preview with new settings
         try {
-            mCamera.setPreviewCallback(mPreviewCallback);
+            for (int i = 0; i < BUFFER_COUNT; i++)
+                mCamera.addCallbackBuffer(new byte[getPreviewWidth() * getPreviewHeight() * 3]);
+
+            mCamera.setPreviewCallbackWithBuffer(mPreviewCallback);
             mCamera.setPreviewDisplay(mHolder);
             mCamera.startPreview();
 
@@ -154,7 +169,6 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     }
 
     private Camera.PreviewCallback mPreviewCallback = new Camera.PreviewCallback() {
-
         @Override
         public void onPreviewFrame(byte[] data, Camera camera) {
             // TODO Auto-generated method stub
@@ -166,6 +180,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                     mQueue.add(data);
                 }
             }
+            mCamera.addCallbackBuffer(data);
         }
     };
 }

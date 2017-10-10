@@ -340,7 +340,7 @@ public class TcpClient {
             YuvImage image = new YuvImage(preview, ImageFormat.NV21, width, height, null);
             Rect r = new Rect(0, 0, width, height);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            boolean ok = image.compressToJpeg(r, 100, baos);
+            boolean ok = image.compressToJpeg(r, 80, baos);
             if (ok) {
                 jpeg = baos.toByteArray();
             }
