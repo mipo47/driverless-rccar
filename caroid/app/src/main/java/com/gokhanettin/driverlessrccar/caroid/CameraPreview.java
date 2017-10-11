@@ -183,4 +183,16 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             mCamera.addCallbackBuffer(data);
         }
     };
+
+    public static byte[] previewToJpeg(byte[] preview, int width, int height) {
+        byte[] jpeg = null;
+        YuvImage image = new YuvImage(preview, ImageFormat.NV21, width, height, null);
+        Rect r = new Rect(0, 0, width, height);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        boolean ok = image.compressToJpeg(r, 80, baos);
+        if (ok) {
+            jpeg = baos.toByteArray();
+        }
+        return jpeg;
+    }
 }

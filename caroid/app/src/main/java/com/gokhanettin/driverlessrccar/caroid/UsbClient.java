@@ -154,7 +154,7 @@ class UsbClient {
     }
 
     public void send(int speedCmd, int steeringCmd, int delay) {
-        Output out = new Output();
+        ArduinoOutput out = new ArduinoOutput();
         out.speedCommand = speedCmd;
         out.steeringCommand = steeringCmd;
 
@@ -181,18 +181,6 @@ class UsbClient {
         notifyStateChange();
     }
 
-    public class Input {
-        public int speedCommand;
-        public int steeringCommand;
-        public float speed;
-        public float steering;
-    }
-
-    public class Output {
-        public int speedCommand;
-        public int steeringCommand;
-    }
-
     private class ConnectedThread extends Thread implements SerialInputOutputManager.Listener {
         private SerialInputOutputManager mManager;
 
@@ -212,7 +200,7 @@ class UsbClient {
             mmValid = false;
         }
 
-        void send(Output out, int delay) {
+        void send(ArduinoOutput out, int delay) {
             // "[<throttle_cmd>;<steering_cmd>]"
             String string = String.format(Locale.US, "[%d;%d]",
                     out.speedCommand, out.steeringCommand);
@@ -271,7 +259,7 @@ class UsbClient {
             String string = mmStringBuilder.toString();
             Log.d(TAG, "Parse string: " + string);
             String tokens[] = string.split(";");
-            Input in = new Input();
+            ArduinoInput in = new ArduinoInput();
             in.speedCommand = Integer.parseInt(tokens[0]);
             in.steeringCommand = Integer.parseInt(tokens[1]);
             in.speed = Float.parseFloat(tokens[2]);

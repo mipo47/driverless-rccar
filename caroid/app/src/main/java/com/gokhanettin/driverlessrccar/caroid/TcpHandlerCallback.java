@@ -3,10 +3,6 @@ package com.gokhanettin.driverlessrccar.caroid;
 import android.os.Handler;
 import android.os.Message;
 
-/**
- * Created by gokhanettin on 01.04.2017.
- */
-
 abstract class TcpHandlerCallback implements Handler.Callback {
     @Override
     public boolean handleMessage(Message msg) {
@@ -15,12 +11,12 @@ abstract class TcpHandlerCallback implements Handler.Callback {
                 onConnectionStateChanged(msg.arg1);
                 break;
             case TcpClient.MESSAGE_RECEIVE:
-                TcpClient.Input in = (TcpClient.Input) msg.obj;
-                onReceived(in.speedCommand, in.steeringCommand);
+                TcpInput in = (TcpInput) msg.obj;
+                onReceived(in);
                 break;
             case TcpClient.MESSAGE_SEND:
-                TcpClient.Output out = (TcpClient.Output) msg.obj;
-                onSent(out.speedCommand, out.steeringCommand, out.speed, out.steering, out.jpeg);
+                TcpOutput out = (TcpOutput) msg.obj;
+                onSent(out);
                 break;
             case TcpClient.MESSAGE_CONNECTION_ESTABLISHED:
                 String serverAddress = msg.getData().getString(TcpClient.SERVER_ADDRESS);
@@ -35,9 +31,8 @@ abstract class TcpHandlerCallback implements Handler.Callback {
     }
 
     protected abstract void onConnectionStateChanged(int newState);
-    protected abstract void onReceived(int speedCmd, int steeringCmd);
-    protected abstract void onSent(int speedCmd, int steeringCmd, float speed,
-                                   float steering, byte[] jpeg);
+    protected abstract void onReceived(TcpInput input);
+    protected abstract void onSent(TcpOutput output);
     protected abstract void onConnectionEstablished(String serverAddress);
     protected abstract void onConnectionError(String error);
 }

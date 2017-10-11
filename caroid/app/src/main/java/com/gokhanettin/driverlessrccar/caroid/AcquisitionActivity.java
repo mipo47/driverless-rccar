@@ -15,16 +15,16 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 
 import java.util.List;
-import java.util.Locale;
 
 public class AcquisitionActivity extends AppCompatActivity {
     private static final String TAG = "AcquisitionActivity";
     private static final int REQUEST_CONNECTION = 0;
 
-    private UsbClient mBluetoothClient;
+    private UsbClient mUsbClient;
     private TcpClient mTcpClient;
     private CameraPreview mCameraPreview;
     private CameraManager mCameraManager;
+    private AndroidInput androidInput = new AndroidInput();
     private boolean mIsTcpSendOk = false;
 
     @Override
@@ -35,9 +35,10 @@ public class AcquisitionActivity extends AppCompatActivity {
         mCameraManager = new CameraManager();
         // Create our Preview view and set it as the content of our activity.
         mCameraPreview = new CameraPreview(this, mCameraManager.getCamera());
+        androidInput.Camera = mCameraPreview;
         final FrameLayout previewLayout = (FrameLayout) findViewById(R.id.acquisition_preview);
         previewLayout.addView(mCameraPreview);
-        mBluetoothClient = new UsbClient(mBluetoothHandler);
+        mUsbClient = new UsbClient(mUsbHandler);
         mTcpClient = new TcpClient(mTcpHandler);
         Intent intent = new Intent(AcquisitionActivity.this, ConnectionActivity.class);
         Log.d(TAG, "Requesting bluetooth and network connections");
@@ -49,7 +50,7 @@ public class AcquisitionActivity extends AppCompatActivity {
         Log.d(TAG, "onResume");
         super.onResume();
         mCameraPreview.setCamera(mCameraManager.getCamera());
-        int btState = mBluetoothClient.getState();
+        int btState = mUsbClient.getState();
         int tcpState = mTcpClient.getState();
         if (btState == UsbClient.STATE_CONNECTED
                 || tcpState == TcpClient.STATE_CONNECTED) {
@@ -70,8 +71,8 @@ public class AcquisitionActivity extends AppCompatActivity {
     public void onStop() {
         Log.d(TAG, "onStop");
         super.onStop();
-        if (mBluetoothClient.getState() != UsbClient.STATE_NONE) {
-            mBluetoothClient.disconnect();
+        if (mUsbClient.getState() != UsbClient.STATE_NONE) {
+            mUsbClient.disconnect();
         }
         if (mTcpClient.getState() != TcpClient.STATE_NONE) {
             mTcpClient.disconnect();
@@ -86,8 +87,8 @@ public class AcquisitionActivity extends AppCompatActivity {
                 String address = data.getStringExtra(ConnectionActivity.EXTRA_BT_ADDRESS);
                 String ip = data.getStringExtra(ConnectionActivity.EXTRA_IP);
                 int port = data.getIntExtra(ConnectionActivity.EXTRA_PORT, 5555);
-                if (mBluetoothClient.getState() == UsbClient.STATE_NONE) {
-                    Log.d(TAG, "Connecting to bluetooth  device at " + address);
+                if (mUsbClient.getState() == UsbClient.STATE_NONE) {
+                    Log.d(TAG, "Connecting to usb device at " + address);
 
                     final UsbManager mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
                     final List<UsbSerialDriver> drivers =
@@ -107,7 +108,7 @@ public class AcquisitionActivity extends AppCompatActivity {
 
                     if (selectedPort != null) {
                         Log.d(TAG, "Connecting to " + address);
-                        if (!mBluetoothClient.connect(mUsbManager, selectedPort, this)) {
+                        if (!mUsbClient.connect(mUsbManager, selectedPort, this)) {
                             Log.d(TAG, "Cannot connect to " + address);
                         }
                     } else {
@@ -124,7 +125,7 @@ public class AcquisitionActivity extends AppCompatActivity {
         }
     }
 
-    private final Handler.Callback mBluetoothHandlerCallback = new  BluetoothHandlerCallback() {
+    private final Handler.Callback mUsbHandlerCallback = new  UsbHandlerCallback() {
         @Override
         protected void onConnectionStateChanged(int newState) {
             String state = "";
@@ -139,40 +140,37 @@ public class AcquisitionActivity extends AppCompatActivity {
                     state = "STATE_CONNECTED";
                     break;
             }
-            Log.d(TAG, "(Bluetooth) onConnectionStateChanged: " + state);
+            Log.d(TAG, "(Serial) onConnectionStateChanged: " + state);
 
         }
 
         @Override
-        protected void onReceived(int speedCmd, int steeringCmd,
-                                  float speed, float steering) {
-            Locale locale = Locale.US;
-            Log.d(TAG, "(Bluetooth) onReceived: " + String.format(locale,
-                    "[%d;%d;%.3f;%.3f]", speedCmd, steeringCmd, speed, steering));
+        protected void onReceived(ArduinoInput arduinoInput) {
+            Log.d(TAG, "(Serial) onReceived: " + arduinoInput.toString());
             if (mIsTcpSendOk) {
-                mTcpClient.send(speedCmd, steeringCmd, speed, steering, mCameraPreview);
+                mTcpClient.send(arduinoInput, androidInput);
             }
         }
 
         @Override
-        protected void onSent(int speedCmd, int steeringCmd) {
+        protected void onSent(ArduinoOutput output) {
 
         }
 
         @Override
         protected void onCommunicationModeChanged(String newMode) {
-            Log.d(TAG, "(Bluetooth) onCommunicationModeChanged: " + newMode);
+            Log.d(TAG, "(Serial) onCommunicationModeChanged: " + newMode);
         }
 
         @Override
         protected void onConnectionEstablished(String connectedDeviceName) {
-            Log.d(TAG, "(Bluetooth) onConnectionEstablished: " + connectedDeviceName);
-            mBluetoothClient.requestCommunicationMode(UsbClient.MODE_MONITOR);
+            Log.d(TAG, "(Serial) onConnectionEstablished: " + connectedDeviceName);
+            mUsbClient.requestCommunicationMode(UsbClient.MODE_MONITOR);
         }
 
         @Override
         protected void onConnectionError(String error) {
-            Log.d(TAG, "(Bluetooth) OnConnectionError: " + error);
+            Log.d(TAG, "(Serial) OnConnectionError: " + error);
             Toast.makeText(getApplicationContext(), error, Toast.LENGTH_LONG).show();
         }
     };
@@ -196,15 +194,13 @@ public class AcquisitionActivity extends AppCompatActivity {
         }
 
         @Override
-        protected void onReceived(int speedCmd, int steeringCmd) {
+        protected void onReceived(TcpInput input) {
 
         }
 
         @Override
-        protected void onSent(int speedCmd, int steeringCmd,
-                              float speed, float steering, byte[] jpeg) {
-            Log.d(TAG, "(Tcp) onSent: " + String.format(Locale.US, "header=[%d;%d;%.3f;%.3f;%d]",
-                    speedCmd, steeringCmd, speed, steering, jpeg.length));
+        protected void onSent(TcpOutput output) {
+            Log.d(TAG, "(Tcp) onSent: " + output.toString());
         }
 
         @Override
@@ -219,6 +215,6 @@ public class AcquisitionActivity extends AppCompatActivity {
         }
     };
 
-    private final Handler mBluetoothHandler = new Handler(mBluetoothHandlerCallback);
+    private final Handler mUsbHandler = new Handler(mUsbHandlerCallback);
     private final Handler mTcpHandler = new Handler(mTcpHandlerCallback);
 }

@@ -1,24 +1,25 @@
 package com.gokhanettin.driverlessrccar.caroid;
 
+import android.graphics.Camera;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Locale;
-
-/**
- * Created by gokhanettin on 01.04.2017.
- */
 
 public class TcpClient {
     private static final String TAG = "TcpClient";
@@ -105,35 +106,13 @@ public class TcpClient {
         }
     }
 
-    public void send(int speedCmd, int steeringCmd, float speed, float steering, CameraPreview cameraPreview) {
-        byte[] preview;
-        int width;
-        int height;
+    public void send(ArduinoInput arduinoInput, AndroidInput androidInput) {
+        if (mState != STATE_CONNECTED) return;
 
-        ConnectedThread t;
-
-        // Synchronize a copy of the ConnectedThread
-        synchronized (this) {
-            if (mState != STATE_CONNECTED) return;
-            t = mConnectedThread;
-            preview = cameraPreview.getPreview();
-            width = cameraPreview.getPreviewWidth();
-            height = cameraPreview.getPreviewHeight();
-        }
-
-        if(preview == null) {
-            return;
-        }
-
-        Output out = new Output();
-        out.speedCommand = speedCmd;
-        out.steeringCommand = steeringCmd;
-        out.speed = speed;
-        out.steering = steering;
-        out.jpeg = null;
+        TcpOutput out = new TcpOutput(arduinoInput, androidInput);
 
         // Process the preview and send unsynchronized
-        t.send(out, preview, width, height);
+        mConnectedThread.send(out);
     }
 
     private synchronized void connected(Socket socket) {
@@ -165,7 +144,6 @@ public class TcpClient {
         notifyStateChange();
     }
 
-
     private void connectionFailed() {
         // Send a failure message back to the Activity
         Message msg = mHandler.obtainMessage(MESSAGE_CONNECTION_ERROR);
@@ -188,19 +166,6 @@ public class TcpClient {
 
         mState = STATE_NONE;
         notifyStateChange();
-    }
-
-    public class Input {
-        public int speedCommand;
-        public int steeringCommand;
-    }
-
-    public class Output {
-        public int speedCommand;
-        public int steeringCommand;
-        public float speed;
-        public float steering;
-        public byte[] jpeg;
     }
 
     private class ConnectThread extends Thread {
@@ -252,8 +217,8 @@ public class TcpClient {
 
     private class ConnectedThread extends Thread {
         private final Socket mmSocket;
-        private final InputStream mmInStream;
-        private final OutputStream mmOutStream;
+        private final DataInputStream mmInStream;
+        private final DataOutputStream mmOutStream;
 
         private StringBuilder mmStringBuilder;
         private boolean mmValid;
@@ -264,7 +229,6 @@ public class TcpClient {
             InputStream tmpIn = null;
             OutputStream tmpOut = null;
 
-            // Get the BluetoothSocket input and output streams
             try {
                 tmpIn = socket.getInputStream();
                 tmpOut = socket.getOutputStream();
@@ -272,8 +236,8 @@ public class TcpClient {
                 Log.e(TAG, "Tmp in/out streams not created", e);
             }
 
-            mmInStream = tmpIn;
-            mmOutStream = tmpOut;
+            mmInStream = new DataInputStream(tmpIn);
+            mmOutStream = new DataOutputStream(tmpOut);
             mState = STATE_CONNECTED;
             mmStringBuilder = new StringBuilder();
             mmValid = false;
@@ -315,36 +279,15 @@ public class TcpClient {
             }
         }
 
-        void send(Output out, byte[] preview, int width, int height) {
-            byte[] jpeg = preprocess(preview, width, height);
-            if (jpeg == null) return;
-
-            out.jpeg = jpeg;
-
-            byte[] header = String.format(Locale.US, "[%d;%d;%.3f;%.3f;%d]",
-                    out.speedCommand, out.steeringCommand, out.speed,
-                    out.steering, jpeg.length).getBytes();
+        void send(TcpOutput out) {
             try {
-                mmOutStream.write(header);
-                mmOutStream.write(jpeg);
+                out.writeTo(mmOutStream);
                 mmOutStream.flush();
                 mHandler.obtainMessage(MESSAGE_SEND, -1, -1, out).sendToTarget();
             } catch (IOException e) {
                 Log.e(TAG, "Exception on send()", e);
                 connectionLost();
             }
-        }
-
-        private byte[] preprocess(byte[] preview, int width, int height) {
-            byte[] jpeg = null;
-            YuvImage image = new YuvImage(preview, ImageFormat.NV21, width, height, null);
-            Rect r = new Rect(0, 0, width, height);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            boolean ok = image.compressToJpeg(r, 80, baos);
-            if (ok) {
-                jpeg = baos.toByteArray();
-            }
-            return jpeg;
         }
 
         void cancel() {

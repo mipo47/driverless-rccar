@@ -106,7 +106,6 @@ public class ConnectionActivity extends AppCompatActivity {
         } else {
             Toast.makeText(getApplicationContext(),
                     "No Connected USB Device Found.", Toast.LENGTH_LONG).show();
-            finish();
         }
     }
 

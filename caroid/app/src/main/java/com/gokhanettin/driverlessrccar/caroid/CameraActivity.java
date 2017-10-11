@@ -21,6 +21,8 @@ public class CameraActivity extends AppCompatActivity {
     private AlertDialog mServerDialog;
     private String mIP = null;
     private int mPort;
+    private AndroidInput androidInput = new AndroidInput();
+    private ArduinoInput arduinoInput = new ArduinoInput();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,6 +33,7 @@ public class CameraActivity extends AppCompatActivity {
         mCameraManager = new CameraManager();
         // Create our Preview view and set it as the content of our activity.
         mCameraPreview = new CameraPreview(this, mCameraManager.getCamera());
+        androidInput.Camera = mCameraPreview;
         FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
         preview.addView(mCameraPreview);
         mTcpClient = new TcpClient(mHandler);
@@ -113,13 +116,12 @@ public class CameraActivity extends AppCompatActivity {
         }
 
         @Override
-        protected void onReceived(int speedCmd, int steeringCmd) {
+        protected void onReceived(TcpInput input) {
 
         }
 
         @Override
-        protected void onSent(int speedCmd, int steeringCmd,
-                              float speed, float steering, byte[] frame) {
+        protected void onSent(TcpOutput output) {
 
         }
 
@@ -143,7 +145,7 @@ public class CameraActivity extends AppCompatActivity {
         @Override
         public void onTick(long millisUntilFinished) {
             if (mTcpClient.getState() == TcpClient.STATE_CONNECTED) {
-                mTcpClient.send(1400, 1568, 0.000f, 0.000f, mCameraPreview);
+                mTcpClient.send(arduinoInput, androidInput);
             }
         }
 

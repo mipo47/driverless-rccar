@@ -66,8 +66,7 @@
 
         <activity
             android:name=".AcquisitionActivity"
-            android:parentActivityName=".MainActivity"
-            android:screenOrientation="landscape">
+            android:parentActivityName=".MainActivity">
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>

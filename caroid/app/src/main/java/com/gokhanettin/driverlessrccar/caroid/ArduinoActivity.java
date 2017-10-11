@@ -19,7 +19,6 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -187,7 +186,7 @@ public class ArduinoActivity extends AppCompatActivity {
             };
 
     private final Handler.Callback mHandlerCallback =
-            new  BluetoothHandlerCallback() {
+            new  UsbHandlerCallback() {
                 @Override
                 protected void onConnectionStateChanged(int newState) {
                     String state = "";
@@ -207,27 +206,24 @@ public class ArduinoActivity extends AppCompatActivity {
                 }
 
                 @Override
-                protected void onReceived(int speedCmd, int steeringCmd,
-                                          float speed, float steering) {
+                protected void onReceived(ArduinoInput input) {
                     Locale locale = Locale.US;
-                    Log.d(TAG, "onReceived: " + String.format(locale,
-                            "[%d;%d;%.3f;%.3f]", speedCmd, steeringCmd, speed, steering));
+                    Log.d(TAG, "onReceived: " + input.toString());
 
-                    mTextViewSpeedCmd.setText(String.format(locale, "%d", speedCmd));
-                    mTextViewSteeringCmd.setText(String.format(locale, "%d", steeringCmd));
-                    mTextViewSpeed.setText(String.format(locale, "%.3f m/s", speed));
-                    mTextViewSteering.setText(String.format(locale, "%.3f°", steering));
-                    mReceiveSpeedCmd = speedCmd;
-                    mReceiveSteeringCmd = steeringCmd;
+                    mTextViewSpeedCmd.setText(String.format(locale, "%d", input.speedCommand));
+                    mTextViewSteeringCmd.setText(String.format(locale, "%d", input.steeringCommand));
+                    mTextViewSpeed.setText(String.format(locale, "%.3f m/s", input.speed));
+                    mTextViewSteering.setText(String.format(locale, "%.3f°", input.steering));
+                    mReceiveSpeedCmd = input.speedCommand;
+                    mReceiveSteeringCmd = input.steeringCommand;
 
                     // Send commands only when we receive data to stay in sync
                     mSerialClient.send(mSendSpeedCmd, mSendSteeringCmd);
                 }
 
                 @Override
-                protected void onSent(int speedCmd, int steeringCmd) {
-                    Log.d(TAG, "onSent: " + String.format(Locale.US,
-                            "[%d;%d]", speedCmd, steeringCmd));
+                protected void onSent(ArduinoOutput output) {
+                    Log.d(TAG, "onSent: " + output.toString());
                 }
 
                 @Override
