@@ -17,9 +17,6 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 
-/**
- * Created by gokhanettin on 01.04.2017.
- */
 
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
     private static final String TAG = "CameraPreview";
@@ -29,7 +26,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private int mMaxFps;
     private final LinkedList<byte[]> mQueue = new LinkedList<>();
     private static final int MAX_QUEUE_SIZE = 2;
-    private static final int BUFFER_COUNT = 4;
+    private static final int BUFFER_COUNT = MAX_QUEUE_SIZE * 2 + 1;
 
     public CameraPreview(Context context, Camera camera) {
         super(context);
@@ -109,10 +106,13 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
         // start preview with new settings
         try {
-            for (int i = 0; i < BUFFER_COUNT; i++)
-                mCamera.addCallbackBuffer(new byte[getPreviewWidth() * getPreviewHeight() * 3]);
-
-            mCamera.setPreviewCallbackWithBuffer(mPreviewCallback);
+            if (BUFFER_COUNT <= 0) {
+                mCamera.setPreviewCallback(mPreviewCallback);
+            } else {
+                for (int i = 0; i < BUFFER_COUNT; i++)
+                    mCamera.addCallbackBuffer(new byte[getPreviewWidth() * getPreviewHeight() * 3]);
+                mCamera.setPreviewCallbackWithBuffer(mPreviewCallback);
+            }
             mCamera.setPreviewDisplay(mHolder);
             mCamera.startPreview();
 
@@ -140,15 +140,24 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         mCamera = camera;
     }
 
-    public byte[] getPreview() {
-        byte[] preview = null;
+    public byte[] getPreviewJpeg() {
+        byte[] jpeg = null;
         synchronized (mQueue) {
             if (mQueue.size() > 0) {
-                preview = mQueue.poll();
+                byte[] preview = mQueue.poll();
+                jpeg = CameraPreview.previewToJpeg(preview, mPreviewSize.width, mPreviewSize.height);
+                if (BUFFER_COUNT > 0 && mCamera != null)
+                    mCamera.addCallbackBuffer(preview);
             }
         }
-        return preview;
+        return jpeg;
     }
+
+    public void freePreview(byte[] preview) {
+
+    }
+
+    public int getPreviewCount() { return mQueue.size(); }
 
     public int getPreviewWidth() {
         return mPreviewSize.width;
@@ -171,16 +180,16 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private Camera.PreviewCallback mPreviewCallback = new Camera.PreviewCallback() {
         @Override
         public void onPreviewFrame(byte[] data, Camera camera) {
-            // TODO Auto-generated method stub
             if (data.length >= getPreviewWidth() * getPreviewHeight()) {
                 synchronized (mQueue) {
                     if (mQueue.size() == MAX_QUEUE_SIZE) {
-                        mQueue.poll();
+                        byte[] buff = mQueue.poll();
+                        if (BUFFER_COUNT > 0)
+                            mCamera.addCallbackBuffer(buff);
                     }
                     mQueue.add(data);
                 }
             }
-            mCamera.addCallbackBuffer(data);
         }
     };
 
@@ -189,7 +198,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         YuvImage image = new YuvImage(preview, ImageFormat.NV21, width, height, null);
         Rect r = new Rect(0, 0, width, height);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        boolean ok = image.compressToJpeg(r, 80, baos);
+        boolean ok = image.compressToJpeg(r, 70, baos);
         if (ok) {
             jpeg = baos.toByteArray();
         }

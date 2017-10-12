@@ -93,7 +93,7 @@ class UsbClient {
                 return false;
             }
             port.open(connection);
-            port.setParameters(9600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         }
         catch (IOException exception) {
             return false;

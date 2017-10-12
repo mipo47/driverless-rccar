@@ -13,7 +13,7 @@ import numpy as np
 HOST = "0.0.0.0"
 PORT = 5000
 
-DATASETDIR = "/tmp/dataset"
+DATASETDIR = "dataset"
 
 if len(sys.argv) > 1:
     DATASETDIR = sys.argv[1]

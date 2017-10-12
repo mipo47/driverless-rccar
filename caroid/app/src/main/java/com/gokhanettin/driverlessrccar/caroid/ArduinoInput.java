@@ -3,6 +3,7 @@ package com.gokhanettin.driverlessrccar.caroid;
 import java.util.Locale;
 
 public class ArduinoInput {
+    public boolean isOnline = false;
     public int speedCommand = 1400;
     public int steeringCommand = 1568;
     public float speed;

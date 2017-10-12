@@ -159,13 +159,13 @@ float getSteering()
 }
 
 void setup()
-{
+{  
     speedCommand = 0;
     steeringCommand = 0;
     speed = 0.0f;
     steering = 0.0f;
 
-    mode = NO_COMM;
+    mode = MO_COMM;
     index = 0;
     valid = false;
 
@@ -180,7 +180,7 @@ void setup()
 
     speedServo.attach(PIN_SPEED_COMMAND);
     steeringServo.attach(PIN_STEERING_COMMAND);
-    Serial.begin(9600);
+    Serial.begin(115200);
 
     steeringServo.writeMicroseconds(STEERING_COMMAND_NEUTRAL);
     speedServo.writeMicroseconds(SPEED_COMMAND_NEUTRAL);
@@ -218,8 +218,8 @@ void loop()
             speedServo.writeMicroseconds(speedCommand);
             steeringServo.writeMicroseconds(steeringCommand);
         }
-        if (frameCounter % 50 == 0) {
-            // 20 Hz Task
+        if (frameCounter % 20 == 0) {
+            // 50 Hz Task
             speed = getSpeed();
             steering = getSteering();
             if (mode != NO_COMM) {

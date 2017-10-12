@@ -2,34 +2,39 @@ package com.gokhanettin.driverlessrccar.caroid;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Locale;
 
 public class TcpOutput {
-    public ArduinoInput ArduinoInput;
-    public AndroidInput AndroidInput;
+    private static final String TAG = "TcpOutput";
+
+    public ArduinoInput arduinoInput;
+    public AndroidInput androidInput;
 
     public TcpOutput(ArduinoInput arduinoInput, AndroidInput androidInput) {
-        ArduinoInput = arduinoInput;
-        AndroidInput = androidInput;
+        this.arduinoInput = arduinoInput;
+        this.androidInput = androidInput;
     }
 
     public String toString() {
-        return "TcpClient.Output = " + ArduinoInput.toString() + " | " + AndroidInput.toString();
+        return "TcpClient.Output = " + arduinoInput.toString() + " | " + androidInput.toString();
     }
 
     public void writeTo(DataOutputStream stream) throws IOException {
-        CameraPreview camera = AndroidInput.Camera;
-        int width = camera.getPreviewWidth();
-        int height = camera.getPreviewHeight();
-        byte[] preview = camera.getPreview();
-        byte[] jpeg = CameraPreview.previewToJpeg(preview, width, height);
+        CameraPreview camera = androidInput.Camera;
+        byte[] jpeg = camera.getPreviewJpeg();
 
-        byte[] header = String.format(Locale.US, "[%d;%d;%.3f;%.3f;%d]",
-                ArduinoInput.speedCommand, ArduinoInput.steeringCommand, ArduinoInput.speed,
-                ArduinoInput.steering, jpeg.length).getBytes();
+        String data = String.format(Locale.US, "[%d;%d;%d;%.3f;%.3f;%d",
+                arduinoInput.isOnline ? 1 : 0,
+                arduinoInput.speedCommand, arduinoInput.steeringCommand,
+                arduinoInput.speed, arduinoInput.steering,
+                jpeg.length
+        );
+        for (float sensorValue: androidInput.SensorValues) {
+            data += String.format(Locale.US, ";%.5f", sensorValue);
+        }
+        data += "]";
 
-        stream.write(header);
+        stream.write(data.getBytes());
         stream.write(jpeg);
     }
 }

@@ -140,11 +140,11 @@ public class CameraActivity extends AppCompatActivity {
 
     private final Handler mHandler = new Handler(mHandlerCallback);
 
-    // 20 Hz
-    private CountDownTimer mTimer = new CountDownTimer(10001, 50) {
+    // 30 Hz
+    private CountDownTimer mTimer = new CountDownTimer(10001, 33) {
         @Override
         public void onTick(long millisUntilFinished) {
-            if (mTcpClient.getState() == TcpClient.STATE_CONNECTED) {
+            if (mTcpClient.getState() == TcpClient.STATE_CONNECTED && androidInput.Camera.getPreviewCount() > 0) {
                 mTcpClient.send(arduinoInput, androidInput);
             }
         }

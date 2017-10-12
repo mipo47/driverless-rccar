@@ -9,7 +9,7 @@ import datetime
 import cv2
 import numpy as np
 
-
+APP_NAME = "stream"
 HOST = "0.0.0.0"
 PORT = 5000
 
@@ -22,8 +22,8 @@ def main():
         print("Waiting for a new connection")
         conn, addr = mySocket.accept()
         timestep = 0
-        start = round(datetime.datetime.now().timestamp() * 1000)
         has_connection = True
+        timestamps = []
         try:
             print("Connection from: " + str(addr))
             while True:
@@ -49,13 +49,16 @@ def main():
 
                 decoded_buff = buff.decode()
                 header = decoded_buff.split(';')
-                speed_cmd = int(header[0])
-                steering_cmd = int(header[1])
-                speed = float(header[2])
-                steering = float(header[3])
-                size = int(header[4])
+                arduino_online = bool(int(header[0]))
+                speed_cmd = int(header[1])
+                steering_cmd = int(header[2])
 
-                # print(timestep, speed_cmd, steering_cmd, speed, steering, size)
+                speed = float(header[3])
+                steering = float(header[4])
+                size = int(header[5])
+
+                # print(arduino_online, timestep, speed_cmd, steering_cmd, speed, steering)
+
                 img = bytearray()
                 size_left = size
                 while size_left > 0:
@@ -65,17 +68,40 @@ def main():
 
                 np_arr = np.frombuffer(img, dtype=np.uint8)
                 frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-                cv2.imshow('acquisition', frame)
 
-                if (cv2.waitKey(1) & 0xFF) == ord('q'):  # Hit `q` to exit
+                for i in range(6, 6 + 3*3):
+                    value = float(header[i])
+                    x = int(720 / 2)
+                    y = int(20 + (i-6) * 10)
+                    if i < 9: # ACCELEROMETER
+                        color = (0, 255, 0)
+                        x_value = int(x + value * 10)
+                    elif i < 12: # GYROSCOPE
+                        color = (0, 0, 255)
+                        x_value = int(x + value * 20)
+                    else: # MAGNETIC_FIELD
+                        color = (255, 0, 0)
+                        x_value = int(x + value * 2)
+
+                    x_value = np.clip(x_value, 0, 720)
+                    cv2.line(frame, (x, y), (x_value, y), color, 2)
+
+                cv2.imshow(APP_NAME, frame)
+
+                timestamp = datetime.datetime.now().timestamp()
+                if len(timestamps) > 0:
+                    speed = (timestamp - timestamps[0]) * 1000.0 / len(timestamps)
+                    fps = 1000.0 / speed
+                    print("{:.2f} ms, {:.1f} fps".format(speed, fps), decoded_buff)
+
+                timestamps.append(timestamp)
+                while len(timestamps) > 30:
+                    timestamps.pop(0)
+
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):  # Hit `q` to exit
                     break
 
-                # timestamp in miliseconds
-                timestamp = round(datetime.datetime.now().timestamp() * 1000)
-
-                speed = (timestamp - start) / timestep
-                fps = 1000.0 * timestep / (timestamp - start)
-                print("{:.2f} ms, {:.1f} fps, size {}".format(speed, fps, size))
 
         except KeyboardInterrupt:
             print("Server asked to disconnect")

@@ -104,6 +104,7 @@ public class ConnectionActivity extends AppCompatActivity {
                 }
             });
         } else {
+            mBluetoothAddress = null;
             Toast.makeText(getApplicationContext(),
                     "No Connected USB Device Found.", Toast.LENGTH_LONG).show();
         }
@@ -123,7 +124,7 @@ public class ConnectionActivity extends AppCompatActivity {
                 Log.e(TAG, "Invalid port no", e);
             }
 
-            if (mBluetoothAddress != null && !ip.isEmpty() && port != -1) {
+            if (!ip.isEmpty() && port != -1) {
                 Intent data = new Intent();
                 data.putExtra(EXTRA_BT_ADDRESS, mBluetoothAddress);
                 data.putExtra(EXTRA_IP, ip);
