@@ -6,12 +6,11 @@ public class ArduinoInput {
     public boolean isOnline = false;
     public int speedCommand = 1400;
     public int steeringCommand = 1568;
-    public float speed;
-    public float steering;
+    public float distance = 0f;
 
     public String toString() {
         Locale locale = Locale.US;
         return String.format(locale,
-                "[%d;%d;%.3f;%.3f]", speedCommand, steeringCommand, speed, steering);
+                "[%d;%d;%.1f]", speedCommand, steeringCommand, distance);
     }
 }

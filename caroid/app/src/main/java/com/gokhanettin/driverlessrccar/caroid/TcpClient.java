@@ -285,7 +285,7 @@ public class TcpClient {
                 mmOutStream.flush();
                 mHandler.obtainMessage(MESSAGE_SEND, -1, -1, out).sendToTarget();
             } catch (IOException e) {
-                Log.e(TAG, "Exception on send()", e);
+                Log.d(TAG, "Exception on send()", e);
                 connectionLost();
             }
         }

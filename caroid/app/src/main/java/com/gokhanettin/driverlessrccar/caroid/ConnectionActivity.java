@@ -52,6 +52,8 @@ public class ConnectionActivity extends AppCompatActivity {
 
         Button buttonConnect = (Button) findViewById(R.id.button_connect);
         buttonConnect.setOnClickListener(mConnectClickListener);
+
+        buttonConnect.callOnClick();
     }
 
     @Override

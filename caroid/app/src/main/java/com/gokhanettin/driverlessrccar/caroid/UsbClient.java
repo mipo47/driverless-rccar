@@ -201,9 +201,8 @@ class UsbClient {
         }
 
         void send(ArduinoOutput out, int delay) {
-            // "[<throttle_cmd>;<steering_cmd>]"
-            String string = String.format(Locale.US, "[%d;%d]",
-                    out.speedCommand, out.steeringCommand);
+            // "<throttle_cmd> <steering_cmd>\n"
+            String string = String.format(Locale.US, "%d %d\n", out.speedCommand, out.steeringCommand);
             byte[] buffer = string.getBytes();
             try {
                 mManager.writeAsync(buffer);
@@ -223,8 +222,8 @@ class UsbClient {
         }
 
         void requestCommunicationMode(String mode, int delay) {
-            // "[<mode>]"
-            byte[] buffer = ("[" + mode + "]").getBytes();
+            // "<mode>\n"
+            byte[] buffer = (mode + "\n").getBytes();
             try {
                 mManager.writeAsync(buffer);
                 Message msg = mHandler.obtainMessage(MESSAGE_COMMUNICATION_MODE_CHANGE);
@@ -258,31 +257,27 @@ class UsbClient {
             // "<throttle_cmd>;<steering_cmd>;<velocity>;<steering>"
             String string = mmStringBuilder.toString();
             Log.d(TAG, "Parse string: " + string);
-            String tokens[] = string.split(";");
+            String tokens[] = string.split(" ");
             ArduinoInput in = new ArduinoInput();
             in.speedCommand = Integer.parseInt(tokens[0]);
             in.steeringCommand = Integer.parseInt(tokens[1]);
-            in.speed = Float.parseFloat(tokens[2]);
-            in.steering = Float.parseFloat(tokens[3]);
+            in.distance = Float.parseFloat(tokens[2]);
             mHandler.obtainMessage(MESSAGE_RECEIVE, -1, -1, in).sendToTarget();
         }
 
         @Override
         public void onNewData(byte[] data) {
             for (byte c : data) {
-                if (c == '[') {
-                    mmValid = true;
-                    mmStringBuilder.setLength(0);
-                    continue;
-                }
                 if (mmValid) {
-                    if (c == ']') {
+                    if (c == '\n') {
                         parse();
-                        mmValid = false;
+                        mmStringBuilder.setLength(0);
                         break;
                     } else {
-                        mmStringBuilder.append((char)c);
+                        mmStringBuilder.append((char) c);
                     }
+                } else if (c == '\n') {
+                    mmValid = true;
                 }
             }
         }

@@ -35,13 +35,12 @@ public class AcquisitionActivity extends AppCompatActivity {
     private AndroidInput androidInput = new AndroidInput();
     private ArduinoInput arduinoInput = new ArduinoInput();
 
+    private UsbManager mUsbManager;
     private UsbClient mUsbClient;
     private TcpClient mTcpClient;
 
-    private Sensor mAcceleration;
-
     // Can be used to reconnect
-    private UsbSerialPort mUsbSerialPort;
+    private UsbSerialPort mUsbSerialPort = null;
     private String mIP = null;
     private int mPort;
 
@@ -65,9 +64,12 @@ public class AcquisitionActivity extends AppCompatActivity {
         if (mCameraPreview != null)
             return;;
 
+        mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+
         mCameraManager = new CameraManager();
         mCameraPreview = new CameraPreview(this, mCameraManager.getCamera());
         androidInput.Camera = mCameraPreview;
+
         final FrameLayout previewLayout = (FrameLayout) findViewById(R.id.acquisition_preview);
         previewLayout.addView(mCameraPreview);
     }
@@ -79,10 +81,7 @@ public class AcquisitionActivity extends AppCompatActivity {
         if (mCameraPreview != null)
             mCameraPreview.setCamera(mCameraManager.getCamera());
 
-        int tcpState = mTcpClient.getState();
-        if (tcpState == TcpClient.STATE_CONNECTED) {
-            mTimer.start();
-        }
+        mTimer.start();
     }
 
     @Override
@@ -121,7 +120,6 @@ public class AcquisitionActivity extends AppCompatActivity {
                 if (mUsbClient.getState() == UsbClient.STATE_NONE && address != null) {
                     Log.d(TAG, "Connecting to usb device at " + address);
 
-                    final UsbManager mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
                     final List<UsbSerialDriver> drivers =
                             UsbSerialProber.getDefaultProber().findAllDrivers(mUsbManager);
 
@@ -244,13 +242,12 @@ public class AcquisitionActivity extends AppCompatActivity {
 
         @Override
         protected void onConnectionEstablished(String serverAddress) {
-            mTimer.start();
+
         }
 
         @Override
         protected void onConnectionError(String error) {
             Toast.makeText(getApplicationContext(), error, Toast.LENGTH_LONG).show();
-            mTimer.cancel();
         }
     };
 
@@ -266,6 +263,19 @@ public class AcquisitionActivity extends AppCompatActivity {
                 && androidInput.Camera.getPreviewCount() > 0)
             {
                 mTcpClient.send(arduinoInput, androidInput);
+            }
+
+            // try to reconnect each 2 seconds
+            if (millisUntilFinished % 2000 == 0) {
+                if (mIP != null && mTcpClient.getState() == TcpClient.STATE_NONE) {
+                    mTcpClient.connect(mIP, mPort);
+                }
+
+                if (mUsbSerialPort != null && mUsbClient.getState() == UsbClient.STATE_NONE) {
+                    if (!mUsbClient.connect(mUsbManager, mUsbSerialPort, AcquisitionActivity.this)) {
+                        Log.d(TAG, "Cannot reconnect to serial");
+                    }
+                }
             }
         }
 

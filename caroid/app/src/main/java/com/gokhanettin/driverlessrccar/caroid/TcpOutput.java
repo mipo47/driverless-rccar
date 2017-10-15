@@ -2,6 +2,7 @@ package com.gokhanettin.driverlessrccar.caroid;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.SocketException;
 import java.util.Locale;
 
 public class TcpOutput {
@@ -23,10 +24,9 @@ public class TcpOutput {
         CameraPreview camera = androidInput.Camera;
         byte[] jpeg = camera.getPreviewJpeg();
 
-        String data = String.format(Locale.US, "[%d;%d;%d;%.3f;%.3f;%d",
+        String data = String.format(Locale.US, "[%d;%d;%d;%.1f;%d",
                 arduinoInput.isOnline ? 1 : 0,
-                arduinoInput.speedCommand, arduinoInput.steeringCommand,
-                arduinoInput.speed, arduinoInput.steering,
+                arduinoInput.speedCommand, arduinoInput.steeringCommand, arduinoInput.distance,
                 jpeg.length
         );
         for (float sensorValue: androidInput.SensorValues) {

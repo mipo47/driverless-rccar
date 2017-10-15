@@ -212,8 +212,6 @@ public class ArduinoActivity extends AppCompatActivity {
 
                     mTextViewSpeedCmd.setText(String.format(locale, "%d", input.speedCommand));
                     mTextViewSteeringCmd.setText(String.format(locale, "%d", input.steeringCommand));
-                    mTextViewSpeed.setText(String.format(locale, "%.3f m/s", input.speed));
-                    mTextViewSteering.setText(String.format(locale, "%.3f°", input.steering));
                     mReceiveSpeedCmd = input.speedCommand;
                     mReceiveSteeringCmd = input.steeringCommand;
 
