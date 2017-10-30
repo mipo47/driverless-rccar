@@ -16,6 +16,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 
 
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
@@ -27,6 +28,10 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private final LinkedList<byte[]> mQueue = new LinkedList<>();
     private static final int MAX_QUEUE_SIZE = 2;
     private static final int BUFFER_COUNT = MAX_QUEUE_SIZE * 2 + 1;
+
+    public int jpegQuality = 50;
+    public String flashMode;
+    public UdpClient tcpClient;
 
     public CameraPreview(Context context, Camera camera) {
         super(context);
@@ -58,6 +63,9 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         params.setPreviewSize(size.width, size.height); // Smaller is better
         params.setPreviewFpsRange(mMaxFps, mMaxFps);
         params.setRecordingHint(true);
+
+        flashMode = params.getFlashMode();
+
 
 //        if (params.isAutoExposureLockSupported() )
 //            params.setAutoExposureLock(true);
@@ -145,16 +153,12 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         synchronized (mQueue) {
             if (mQueue.size() > 0) {
                 byte[] preview = mQueue.poll();
-                jpeg = CameraPreview.previewToJpeg(preview, mPreviewSize.width, mPreviewSize.height);
+                jpeg = previewToJpeg(preview, mPreviewSize.width, mPreviewSize.height);
                 if (BUFFER_COUNT > 0 && mCamera != null)
                     mCamera.addCallbackBuffer(preview);
             }
         }
         return jpeg;
-    }
-
-    public void freePreview(byte[] preview) {
-
     }
 
     public int getPreviewCount() { return mQueue.size(); }
@@ -169,6 +173,17 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
     public int getPreviewFps() {
         return mMaxFps;
+    }
+
+    public void flash() {
+        if (mCamera != null) {
+            Camera.Parameters params = mCamera.getParameters();
+            flashMode = !Objects.equals(flashMode, Camera.Parameters.FLASH_MODE_TORCH)
+                    ? Camera.Parameters.FLASH_MODE_TORCH
+                    : Camera.Parameters.FLASH_MODE_OFF;
+            params.setFlashMode(flashMode);
+            mCamera.setParameters(params);
+        }
     }
 
     private void clearQueue() {
@@ -193,12 +208,23 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         }
     };
 
-    public static byte[] previewToJpeg(byte[] preview, int width, int height) {
+    private byte[] previewToJpeg(byte[] preview, int width, int height) {
+        if (tcpClient != null) {
+//            if (tcpClient.sendProbability < 0.7 && jpegQuality > 2) {
+//                jpegQuality--;
+//            }
+//            else if (tcpClient.sendProbability > 0.95 && jpegQuality < 95) {
+//                jpegQuality++;
+//            }
+            jpegQuality = (int) Math.round(2 + Math.pow(tcpClient.sendProbability, 2) * 98);
+            Log.d(TAG, "changing JPEG quality to " + jpegQuality);
+        }
+
         byte[] jpeg = null;
         YuvImage image = new YuvImage(preview, ImageFormat.NV21, width, height, null);
         Rect r = new Rect(0, 0, width, height);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        boolean ok = image.compressToJpeg(r, 70, baos);
+        boolean ok = image.compressToJpeg(r, jpegQuality, baos);
         if (ok) {
             jpeg = baos.toByteArray();
         }

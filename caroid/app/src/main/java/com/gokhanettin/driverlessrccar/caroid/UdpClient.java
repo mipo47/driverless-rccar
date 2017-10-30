@@ -5,17 +5,22 @@ import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 
-public class TcpClient {
-    private static final String TAG = "TcpClient";
+public class UdpClient {
+    private static final String TAG = "UdpClient";
 
     // Message types sent from the TcpClient to activities
     public static final int MESSAGE_CONNECTION_STATE_CHANGE = 0;
@@ -26,7 +31,7 @@ public class TcpClient {
 
     // Key names to identify some messages
     public static final String SERVER_ADDRESS = "server_address";
-    public static final String CONNECTION_ERROR = "tcp_conn_error";
+    public static final String CONNECTION_ERROR = "udp_conn_error";
 
     // Constants that indicate the current connection state
     public static final int STATE_NONE = 0;       // we're doing nothing
@@ -43,7 +48,10 @@ public class TcpClient {
     private int mState;
     private int mNewState;
 
-    public TcpClient(Handler handler) {
+    private InetAddress mAddress;
+    private int mPort;
+
+    public UdpClient(Handler handler) {
         mHandler = handler;
         mState = STATE_NONE;
         mNewState = mState;
@@ -66,6 +74,13 @@ public class TcpClient {
 
     public synchronized void connect(String ip, int port) {
         Log.d(TAG, "Connecting to: " + ip + ":" + port);
+        try {
+            mAddress = InetAddress.getByName(ip);
+        } catch (UnknownHostException exc) {
+            Log.e(TAG, "Cannot connect", exc);
+            return;
+        }
+        mPort = port;
 
         // Cancel any thread attempting to make a connection
         if (mConnectThread != null) {
@@ -120,14 +135,14 @@ public class TcpClient {
         if (mWriterThread.sendAsync(out)) {
             currentProbability = 1f;
         } else {
-            Log.d(TAG, "TCP is busy, skip sending");
+//            Log.d(TAG, "UDP is busy, skip sending");
         }
         // sliding average
         sendProbability = sendProbability * 0.995f + 0.005f * currentProbability;
     }
 
-    private synchronized void connected(Socket socket) {
-        String serverAddress = socket.getInetAddress().toString();
+    private synchronized void connected(DatagramSocket socket) {
+        String serverAddress = mAddress.toString();
         Log.d(TAG, "Connected to " + serverAddress);
 
         // Cancel the thread that completed the connection
@@ -188,12 +203,11 @@ public class TcpClient {
     private class ConnectThread extends Thread {
         String mmIP;
         int mmPort;
-        Socket mmSocket;
+        DatagramSocket mmSocket;
 
         public ConnectThread(String ip, int port) {
             mmIP = ip;
             mmPort = port;
-            mmSocket = new Socket();
         }
 
         @Override
@@ -201,21 +215,17 @@ public class TcpClient {
             super.run();
 
             try {
-                mmSocket.connect(new InetSocketAddress(mmIP, mmPort), 10000);
+                mmSocket = new DatagramSocket();
             } catch (IOException e) {
                 Log.e(TAG, "Failed to connect to " + mmIP + ":" + mmPort, e);
                 connectionFailed();
                 // Close the socket
-                try {
-                    mmSocket.close();
-                } catch (IOException e2) {
-                    Log.e(TAG, "Unable to close() socket on connection failure", e2);
-                }
+                mmSocket.close();
                 return;
             }
 
             // Reset the ConnectThread because we're done
-            synchronized (TcpClient.this) {
+            synchronized (UdpClient.this) {
                 mConnectThread = null;
             }
 
@@ -224,33 +234,19 @@ public class TcpClient {
         }
 
         void cancel() {
-            try {
-                mmSocket.close();
-            } catch (IOException e) {
-                Log.e(TAG, "close() failed at ConnectThread.cancel()", e);
-            }
+            mmSocket.close();
         }
     }
 
     private class ReaderThread extends Thread {
-        private final Socket mmSocket;
-        private final DataInputStream mmInStream;
+        private final DatagramSocket mmSocket;
 
         private StringBuilder mmStringBuilder;
         private boolean mmValid;
 
-        public ReaderThread(Socket socket) {
+        public ReaderThread(DatagramSocket socket) {
             Log.d(TAG, "create ReaderThread");
             mmSocket = socket;
-            InputStream tmpIn = null;
-
-            try {
-                tmpIn = socket.getInputStream();
-            } catch (IOException e) {
-                Log.e(TAG, "Tmp in/out streams not created", e);
-            }
-
-            mmInStream = new DataInputStream(tmpIn);
             mState = STATE_CONNECTED;
             mmStringBuilder = new StringBuilder();
             mmValid = false;
@@ -261,14 +257,17 @@ public class TcpClient {
             super.run();
             Log.i(TAG, "BEGIN mReaderThread");
             setName("ReaderThread");
+            byte[] receiveData = new byte[1024];
             int c;
             // Keep listening to the InputStream while connected
             while (mState == STATE_CONNECTED) {
                 try {
                     // Read from the InputStream
                     // "[<throttle_cmd>;<steering_cmd>]"
-                    while (mmInStream.available() > 0) {
-                        c = mmInStream.read();
+                    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+                    mmSocket.receive(receivePacket);
+                    for (int i = 0; i < receivePacket.getLength(); i++) {
+                        c = receiveData[i];
                         if (c == '[') {
                             mmValid = true;
                             mmStringBuilder.setLength(0);
@@ -284,6 +283,10 @@ public class TcpClient {
                             }
                         }
                     }
+                } catch (SocketException e) {
+                    Log.e(TAG, "Connection lost to the tcp server", e);
+                    connectionLost();
+                    break;
                 } catch (IOException e) {
                     Log.e(TAG, "Connection lost to the tcp server", e);
                     connectionLost();
@@ -305,29 +308,23 @@ public class TcpClient {
     }
 
     private class WriterThread extends Thread {
-        private final Socket mmSocket;
+        private final DatagramSocket mmSocket;
         private final DataOutputStream mmOutStream;
+        private final ByteArrayOutputStream mmByteOutput;
         private TcpOutput mOut;
 
-        public WriterThread(Socket socket) {
+        public WriterThread(DatagramSocket socket) {
             Log.d(TAG, "create WriterThread");
             mmSocket = socket;
-            OutputStream tmpOut = null;
-
-            try {
-                tmpOut = socket.getOutputStream();
-            } catch (IOException e) {
-                Log.e(TAG, "Tmp in/out streams not created", e);
-            }
-
-            mmOutStream = new DataOutputStream(tmpOut);
+            mmByteOutput = new ByteArrayOutputStream(200000);
+            mmOutStream = new DataOutputStream(mmByteOutput);
         }
 
         @Override
         public void run() {
             super.run();
-            Log.i(TAG, "BEGIN mReaderThread");
-            setName("ReaderThread");
+            Log.i(TAG, "BEGIN WriterThread");
+            setName("WriterThread");
             int c;
             // Keep listening to the InputStream while connected
             while (mState == STATE_CONNECTED) {
@@ -354,6 +351,12 @@ public class TcpClient {
             try {
                 out.writeTo(mmOutStream);
                 mmOutStream.flush();
+
+                byte[] sendData = mmByteOutput.toByteArray();
+                mmByteOutput.reset();
+                DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, mAddress, mPort);
+                mmSocket.send(sendPacket);
+
                 mHandler.obtainMessage(MESSAGE_SEND, -1, -1, out).sendToTarget();
             } catch (IOException e) {
                 Log.d(TAG, "Exception on send()", e);
@@ -368,11 +371,7 @@ public class TcpClient {
             } catch (IOException e) {
                 Log.e(TAG, "Failed to send communication end indication", e);
             }
-            try {
-                mmSocket.close();
-            } catch (IOException e) {
-                Log.e(TAG, "close() of connect socket failed at ReaderThread.cancel()", e);
-            }
+            mmSocket.close();
         }
     }
 }

@@ -140,7 +140,7 @@ class UsbClient {
     public void requestCommunicationMode(String mode, int delay) {
         // Create temporary object
         ConnectedThread t;
-        // Synchronize a copy of the ConnectedThread
+        // Synchronize a copy of the ReaderThread
         synchronized (this) {
             if (mState != STATE_CONNECTED) return;
             t = mConnectedThread;
@@ -160,13 +160,26 @@ class UsbClient {
 
         ConnectedThread t;
 
-        // Synchronize a copy of the ConnectedThread
+        // Synchronize a copy of the ReaderThread
         synchronized (this) {
             if (mState != STATE_CONNECTED) return;
             t = mConnectedThread;
         }
         // Send unsynchronized
         t.send(out, delay);
+    }
+
+    public void send(String command, int delay) {
+        ConnectedThread t;
+
+        // Synchronize a copy of the ReaderThread
+        synchronized (this) {
+            if (mState != STATE_CONNECTED) return;
+            t = mConnectedThread;
+        }
+
+        // Send unsynchronized
+        t.send(command, delay);
     }
 
     private void connectionLost() {
@@ -190,7 +203,7 @@ class UsbClient {
         private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
 
         ConnectedThread(UsbSerialPort port) {
-            Log.d(TAG, "create ConnectedThread");
+            Log.d(TAG, "create ReaderThread");
 
             mManager = new SerialInputOutputManager(port, this);
             mExecutor.submit(mManager);
@@ -200,13 +213,12 @@ class UsbClient {
             mmValid = false;
         }
 
-        void send(ArduinoOutput out, int delay) {
-            // "<throttle_cmd> <steering_cmd>\n"
-            String string = String.format(Locale.US, "%d %d\n", out.speedCommand, out.steeringCommand);
-            byte[] buffer = string.getBytes();
+        void send(String command, int delay) {
+            Log.d(TAG, "Sending to serial: " + command);
+
+            byte[] buffer = command.getBytes();
             try {
                 mManager.writeAsync(buffer);
-                mHandler.obtainMessage(MESSAGE_SEND, -1, -1, out).sendToTarget();
             } catch (Exception e) {
                 Log.e(TAG, "Exception on send()", e);
                 connectionLost();
@@ -221,8 +233,16 @@ class UsbClient {
             }
         }
 
+        void send(ArduinoOutput out, int delay) {
+            // "<throttle_cmd> <steering_cmd>\n"
+            String string = String.format(Locale.US, "%d %d\n", out.speedCommand, out.steeringCommand);
+            send(string, delay);
+            mHandler.obtainMessage(MESSAGE_SEND, -1, -1, out).sendToTarget();
+        }
+
         void requestCommunicationMode(String mode, int delay) {
             // "<mode>\n"
+            Log.d(TAG, "Changing mode to " + mode);
             byte[] buffer = (mode + "\n").getBytes();
             try {
                 mManager.writeAsync(buffer);
@@ -256,13 +276,17 @@ class UsbClient {
         private void parse() {
             // "<throttle_cmd>;<steering_cmd>;<velocity>;<steering>"
             String string = mmStringBuilder.toString();
-            Log.d(TAG, "Parse string: " + string);
-            String tokens[] = string.split(" ");
-            ArduinoInput in = new ArduinoInput();
-            in.speedCommand = Integer.parseInt(tokens[0]);
-            in.steeringCommand = Integer.parseInt(tokens[1]);
-            in.distance = Float.parseFloat(tokens[2]);
-            mHandler.obtainMessage(MESSAGE_RECEIVE, -1, -1, in).sendToTarget();
+            try {
+                Log.d(TAG, "Parse string: " + string);
+                String tokens[] = string.split(" ");
+                ArduinoInput in = new ArduinoInput();
+                in.speedCommand = Integer.parseInt(tokens[0]);
+                in.steeringCommand = Integer.parseInt(tokens[1]);
+                in.distance = Float.parseFloat(tokens[2]);
+                mHandler.obtainMessage(MESSAGE_RECEIVE, -1, -1, in).sendToTarget();
+            } catch (NumberFormatException exc) {
+                Log.e(TAG, "Unable to parse data from serial: " + string, exc);
+            }
         }
 
         @Override

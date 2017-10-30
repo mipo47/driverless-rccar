@@ -6,16 +6,17 @@ import datetime
 import cv2
 import numpy as np
 import win32api as wapi
+import time
 
 APP_NAME = "stream"
 HOST = "0.0.0.0"
 PORT = 5000
 TIMEOUT = 5  # seconds
 
-SPEED_NEUTRAL = 1470
+SPEED_NEUTRAL = 1420
 SPEED_MIN = 1000
 SPEED_MAX = 1800
-STEERING_NEUTRAL = 1420
+STEERING_NEUTRAL = 1400
 STEERING_MIN = STEERING_NEUTRAL - 530  # right
 STEERING_MAX = STEERING_NEUTRAL + 530  # left
 TURN_AMOUNT = 0.005
@@ -47,32 +48,34 @@ class Stream:
         self.speed = 0  # -1 to 1
         self.steering = 0  # -1 to 1
 
+        self.data = None
+        self.data_name = "datasets/" + datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+
     def start(self, start_image_id=0):
         self.image_id = start_image_id
-
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((HOST, PORT))
-        server_socket.listen(1)
         while True:
-            print("Waiting for a new connection")
-            self.socket, self.ip = server_socket.accept()
-            print("Connection from: " + str(self.ip))
+            server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            server_socket.bind((HOST, PORT))
+            print("UDP socket listening port", PORT)
+            self.socket = server_socket
+            self.socket_address = None
             try:
                 self.connection(self.socket)
+                self.socket.close()
             except (ConnectionResetError, ConnectionAbortedError):
                 print("Client closed connection")
                 if self.socket is None:
                     self.socket.close()
 
-
     def send_command(self, command):
-        if self.socket is None:
+        if self.socket is None or self.socket_address is None:
             print("Simulate send", command, self.steering)
         else:
+            print(self.socket_address, command)
             command = "[" + command + "]"
             b = bytearray()
             b.extend(map(ord, command))
-            self.socket.send(b)
+            self.socket.sendto(b, self.socket_address)
 
     def key_check(self):
         key_presssed = {}
@@ -117,63 +120,72 @@ class Stream:
             self.steering *= 0.995
             self.speed *= 0.995
 
-    def connection(self, conn):
-        timestep = 0
-        has_connection = True
-        timestamps = []
-        fps = 0
-        while True:
-            timestep += 1
-            self.image_id += 1
-
-            buff = b''
+    def read_packet(self, conn, timeout, key_check=False):
+        try:
             conn.setblocking(False)
-            start_recv = datetime.datetime.now().timestamp()
-            while True:
+        except:
+            return False, None, None, None
+
+        has_connection = True
+        packet_i = 0
+        buff = b''
+        start_recv = datetime.datetime.now().timestamp()
+        while True:
+            if key_check:
                 self.key_check()
 
-                ready_to_read, ready_to_write, in_error = select.select([conn], [], [], 0.1)
+            if datetime.datetime.now().timestamp() - start_recv > timeout:
+                print("Client is frozen, reconnecting...")
+                conn.close()
+                return False, None, None, None
+                break
 
-                if datetime.datetime.now().timestamp() - start_recv > (TIMEOUT if timestep > 1 else TIMEOUT * 5):
-                    print("Client is frozen, reconnecting...")
+            try:
+                packet, self.socket_address = conn.recvfrom(200000)
+            except socket.error:
+                time.sleep(0.01)
+                continue
+
+            while packet_i < len(packet):
+                c = bytes([packet[packet_i]])
+                if c == b'$':
+                    print("Client asked to disconnect")
                     conn.close()
                     has_connection = False
                     break
-                elif len(ready_to_read):
-                    c = conn.recv(1)
-                    if c == b'$':
-                        print("Client asked to disconnect")
-                        conn.close()
-                        has_connection = False
-                        break
-                    elif c == b'[':
-                        continue
-                    elif c == b']':
-                        break
-                    else:
-                        buff += c
+                elif c == b'[':
+                    packet_i += 1
+                    continue
+                elif c == b']':
+                    packet_i += 1
+                    break
+                else:
+                    buff += c
+                    packet_i += 1
+            return has_connection, packet, packet_i, buff
 
+    def connection(self, conn):
+        time_step = 0
+        timestamps = []
+        fps = 0
+        while True:
+            time_step += 1
+            has_connection, packet, packet_i, buff = self.read_packet(conn, (TIMEOUT if time_step > 1 else TIMEOUT * 5))
             if not has_connection:
                 break
 
             decoded_buff = buff.decode()
             header = decoded_buff.split(';')
 
-            arduino_online = bool(int(header[0]))
-            speed_cmd = int(header[1])
-            steering_cmd = int(header[2])
-            distance = float(header[3])
-            size = int(header[4])
-            # print(arduino_online, timestep, speed_cmd, steering_cmd)
+            # arduino_online = bool(int(header[0]))
+            # speed_cmd = int(header[1])
+            # steering_cmd = int(header[2])
+            # distance = float(header[3])
+            # size = int(header[4])
+            # print(arduino_online, timestep, speed_cmd, steering_cmd, distance, size)
+            print(decoded_buff)
 
-            img = bytearray()
-            size_left = size
-            while size_left > 0:
-                conn.setblocking(True)
-                chunk = conn.recv(size_left)
-                img.extend(chunk)
-                size_left -= len(chunk)
-
+            img = bytearray(packet[packet_i:])
             np_arr = np.frombuffer(img, dtype=np.uint8)
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
@@ -184,15 +196,29 @@ class Stream:
 
             timestamp = datetime.datetime.now().timestamp()
             if len(timestamps) > 0:
-                fps = len(timestamps) / (timestamp - timestamps[0])
-                print(decoded_buff)
+                fps = len(timestamps) / (timestamp - timestamps[0] + 1e-6)
 
             timestamps.append(timestamp)
             while len(timestamps) > 50:
                 timestamps.pop(0)
 
+            self.write_to_dataset(header, img, timestamp)
             Stream.draw(header, frame, fps)
 
+    def write_to_dataset(self, header, image, timestamp):
+        if self.data is None:
+            os.makedirs(self.data_name)
+            self.data = open(self.data_name + "/header.csv", 'a')
+            self.data.write("timestamp,image_id,online,speed,steering,distance,size,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z,mag_x,mag_y,max_z,lat,lon\n")
+
+        self.image_id += 1
+        with open(self.data_name + "/{}.jpg".format(self.image_id), 'wb') as f:
+            f.write(image)
+
+        entry = "{},{},".format(timestamp, self.image_id) + ",".join(header) + "\n"
+        self.data.write(entry)
+        if self.image_id % 20 == 0:
+            self.data.flush()
 
     @staticmethod
     def draw(header, frame, fps):

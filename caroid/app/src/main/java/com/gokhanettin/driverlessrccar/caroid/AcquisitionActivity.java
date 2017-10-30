@@ -1,20 +1,13 @@
 package com.gokhanettin.driverlessrccar.caroid;
 
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
-import android.hardware.Sensor;
-import android.hardware.SensorManager;
 import android.hardware.usb.UsbManager;
 import android.os.CountDownTimer;
 import android.os.Handler;
-import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
@@ -29,15 +22,15 @@ public class AcquisitionActivity extends AppCompatActivity {
     private static final int REQUEST_CONNECTION = 0;
 
     // Will be initialized after ConnectionActivity
-    private CameraPreview mCameraPreview;
+    public CameraPreview mCameraPreview;
     private CameraManager mCameraManager;
 
     private AndroidInput androidInput = new AndroidInput();
-    private ArduinoInput arduinoInput = new ArduinoInput();
+    private ArduinoInput arduinoInputStub = new ArduinoInput();
 
     private UsbManager mUsbManager;
-    private UsbClient mUsbClient;
-    private TcpClient mTcpClient;
+    public UsbClient mUsbClient;
+    private UdpClient mTcpClient;
 
     // Can be used to reconnect
     private UsbSerialPort mUsbSerialPort = null;
@@ -50,7 +43,8 @@ public class AcquisitionActivity extends AppCompatActivity {
         setContentView(R.layout.activity_acquisition);
 
         mUsbClient = new UsbClient(mUsbHandler);
-        mTcpClient = new TcpClient(mTcpHandler);
+        mTcpClient = new UdpClient(mTcpHandler);
+        mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
 
         androidInput.setSensors(this);
 
@@ -64,10 +58,9 @@ public class AcquisitionActivity extends AppCompatActivity {
         if (mCameraPreview != null)
             return;;
 
-        mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
-
         mCameraManager = new CameraManager();
         mCameraPreview = new CameraPreview(this, mCameraManager.getCamera());
+        mCameraPreview.tcpClient = mTcpClient;
         androidInput.Camera = mCameraPreview;
 
         final FrameLayout previewLayout = (FrameLayout) findViewById(R.id.acquisition_preview);
@@ -139,8 +132,6 @@ public class AcquisitionActivity extends AppCompatActivity {
                         Log.d(TAG, "Connecting to " + address);
                         if (!mUsbClient.connect(mUsbManager, mUsbSerialPort, this)) {
                             Log.d(TAG, "Cannot connect to " + address);
-                        } else {
-                            arduinoInput.isOnline = true;
                         }
                     } else {
                         Log.d(TAG, "Unable to find " + address);
@@ -164,15 +155,12 @@ public class AcquisitionActivity extends AppCompatActivity {
             switch (newState) {
                 case UsbClient.STATE_NONE:
                     state = "STATE_NONE";
-                    arduinoInput.isOnline = false;
                     break;
                 case UsbClient.STATE_CONNECTING:
                     state = "STATE_CONNECTING";
-                    arduinoInput.isOnline = false;
                     break;
                 case UsbClient.STATE_CONNECTED:
                     state = "STATE_CONNECTED";
-                    arduinoInput.isOnline = true;
                     break;
             }
             Log.d(TAG, "(Serial) onConnectionStateChanged: " + state);
@@ -183,6 +171,7 @@ public class AcquisitionActivity extends AppCompatActivity {
         protected void onReceived(ArduinoInput arduinoInput) {
             Log.d(TAG, "(Serial) onReceived: " + arduinoInput.toString());
             if (mTcpClient.getState() == TcpClient.STATE_CONNECTED && mCameraPreview.getPreviewCount() > 0) {
+                arduinoInput.isOnline = true;
                 mTcpClient.send(arduinoInput, androidInput);
             }
         }
@@ -200,14 +189,12 @@ public class AcquisitionActivity extends AppCompatActivity {
         @Override
         protected void onConnectionEstablished(String connectedDeviceName) {
             Log.d(TAG, "(Serial) onConnectionEstablished: " + connectedDeviceName);
-            arduinoInput.isOnline = true;
             mUsbClient.requestCommunicationMode(UsbClient.MODE_MONITOR);
         }
 
         @Override
         protected void onConnectionError(String error) {
             Log.d(TAG, "(Serial) OnConnectionError: " + error);
-            arduinoInput.isOnline = false;
             Toast.makeText(getApplicationContext(), error, Toast.LENGTH_LONG).show();
         }
     };
@@ -232,7 +219,8 @@ public class AcquisitionActivity extends AppCompatActivity {
 
         @Override
         protected void onReceived(TcpInput input) {
-
+            Log.d(TAG, "Running command " + input.command);
+            input.command.run(AcquisitionActivity.this);
         }
 
         @Override
@@ -262,7 +250,7 @@ public class AcquisitionActivity extends AppCompatActivity {
                 && mUsbClient.getState() != UsbClient.STATE_CONNECTED
                 && androidInput.Camera.getPreviewCount() > 0)
             {
-                mTcpClient.send(arduinoInput, androidInput);
+                mTcpClient.send(arduinoInputStub, androidInput);
             }
 
             // try to reconnect each 2 seconds
