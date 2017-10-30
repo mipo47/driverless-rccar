@@ -31,8 +31,9 @@
 #define STEERING_COMMAND_RIGHT   (STEERING_COMMAND_NEUTRAL - 530)
 #define STEERING_COMMAND_LEFT    (STEERING_COMMAND_NEUTRAL + 530)
 
-#define PIN_DISTANCE_ECHO (2)
-#define PIN_DISTANCE_TRIG (3)
+//#define ENABLE_DISTANCE
+#define PIN_DISTANCE_ECHO (6)
+#define PIN_DISTANCE_TRIG (7)
 #define MAX_DISTANCE 400
 
 NewPing sonar(PIN_DISTANCE_TRIG, PIN_DISTANCE_ECHO, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
@@ -99,6 +100,8 @@ void setup()
   pinMode(PIN_DISTANCE_TRIG, OUTPUT); // Sets the PIN_DISTANCE_TRIG as an Output
   pinMode(PIN_DISTANCE_ECHO, INPUT); // Sets the PIN_DISTANCE_ECHO as an Input
 
+  pinMode(13, OUTPUT); // Shows current mode (true means control)
+
   Serial.begin(115200);
 
   steeringServo.writeMicroseconds(STEERING_COMMAND_NEUTRAL);
@@ -124,6 +127,10 @@ void parse()
 
   if (*p == MO_COMM || *p == CO_COMM || *p == NO_COMM) {
     mode = *p;
+    if (mode == CO_COMM)
+      digitalWrite(13, HIGH);
+    else
+      digitalWrite(13, LOW);
     return;
   }
   while (true) {
@@ -182,11 +189,13 @@ void loop()
   currentTime = micros();
   deltaTime = currentTime - previousTime;
 
+#ifdef ENABLE_DISTANCE
   // Notice how there's no delays in this sketch to allow you to do other processing in-line while doing distance pings.
   if (millis() >= pingTimer) {   // pingSpeed milliseconds since last ping, do another ping.
     pingTimer += pingSpeed;      // Set the next ping time.
     sonar.ping_timer(echoCheck); // Send out the ping, calls "echoCheck" function every 24uS where you can check the ping status.
   }
+#endif
 
   if (deltaTime >= 1000) {
     ++frameCounter;
