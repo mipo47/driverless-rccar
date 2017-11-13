@@ -29,7 +29,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private static final int MAX_QUEUE_SIZE = 2;
     private static final int BUFFER_COUNT = MAX_QUEUE_SIZE * 2 + 1;
 
-    public int jpegQuality = 50;
+    public int jpegQuality = 10;
     public String flashMode;
     public UdpClient tcpClient;
 
@@ -209,16 +209,10 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     };
 
     private byte[] previewToJpeg(byte[] preview, int width, int height) {
-        if (tcpClient != null) {
-//            if (tcpClient.sendProbability < 0.7 && jpegQuality > 2) {
-//                jpegQuality--;
-//            }
-//            else if (tcpClient.sendProbability > 0.95 && jpegQuality < 95) {
-//                jpegQuality++;
-//            }
-            jpegQuality = (int) Math.round(2 + Math.pow(tcpClient.sendProbability, 2) * 98);
-            Log.d(TAG, "changing JPEG quality to " + jpegQuality);
-        }
+//        if (tcpClient != null) {
+//            jpegQuality = (int) Math.round(2 + Math.pow(tcpClient.sendProbability, 2) * 98);
+//            Log.d(TAG, "changing JPEG quality to " + jpegQuality);
+//        }
 
         byte[] jpeg = null;
         YuvImage image = new YuvImage(preview, ImageFormat.NV21, width, height, null);
