@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Caroid</string>
-    <!--<string name="default_ip">78.60.78.228</string>-->
+    <string name="default_ip">78.60.20.238</string>
     <!--<string name="default_ip">192.168.1.64</string>-->
-    <string name="default_ip">192.168.43.184</string>
+    <!--<string name="default_ip">192.168.43.184</string>-->
     <string name="default_port">5000</string>
 </resources>
