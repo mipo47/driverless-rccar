@@ -2,16 +2,18 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import pandas as pd
 
-DATASET_FILE = "dataset.txt"
-IMAGE_FOLDER = "im"
-DATASET_FILE_HEADER = "timestep;timestamp;imagefile;steering_cmd;speed_cmd;steering;speed".split(";")
+DATASET_FILE = "filtered.csv"
+IMAGE_FOLDER = None
+# DATASET_FILE_HEADER = "timestep;timestamp;imagefile;steering_cmd;speed_cmd;steering;speed".split(";")
 
-COMMAND_NAMES = DATASET_FILE_HEADER[3:5]  # steering_cmd, speed_cmd
+COMMAND_NAMES = ['steering', 'speed']  # steering_cmd, speed_cmd
 NUM_COMMANDS = len(COMMAND_NAMES)
 
-HEIGHT = 144
-WIDTH = 176
+RATIO = 8  # downscaling ration from 720x480 to 90x60
+HEIGHT = int(480 / RATIO)
+WIDTH = int(720 / RATIO)
 CHANNELS = 3  # RGB
 
 
@@ -81,8 +83,8 @@ class BatchIter:
 
 def parse_training_dataset(dataset_dir, sequence_length, batch_size,
                            validation_percentage=10):
-    sum_f = np.float128([0.0] * NUM_COMMANDS)
-    sum_sq_f = np.float128([0.0] * NUM_COMMANDS)
+    sum_f = np.float64([0.0] * NUM_COMMANDS)
+    sum_sq_f = np.float64([0.0] * NUM_COMMANDS)
     rows = _parse_dataset(dataset_dir)
     training_set = []
     validation_set = []
@@ -108,15 +110,15 @@ def parse_test_dataset(dataset_dir):
 
 def _parse_dataset(dataset_dir):
     filename = dataset_dir + "/" + DATASET_FILE
-    with open(filename, 'r') as dsf:
-        lines = [line.strip().split(";")[2:5] for line in dsf.readlines()]
-        image_folder = dataset_dir + "/" + IMAGE_FOLDER + "/"
-        dataset = map(lambda x: (image_folder + x[0],
-                                 np.float32(x[1:])), lines)
-        # [(image, [steering_cmd, speed_cmd]),
-        #  (image, [steering_cmd, speed_cmd]),
-        #                                 ...]
-        return list(dataset)
+    df = pd.read_csv(filename)
+
+    lines = df[['image_id', 'steering', 'speed']].values
+    image_folder = dataset_dir + "/" if IMAGE_FOLDER is None else dataset_dir + "/" + IMAGE_FOLDER + "/"
+    dataset = map(lambda x: (image_folder + str(x[0]) + ".jpg", np.float32(x[1:])), lines)
+    # [(image, [steering_cmd, speed_cmd]),
+    #  (image, [steering_cmd, speed_cmd]),
+    #                                 ...]
+    return list(dataset)
 
 
 if __name__ == "__main__":

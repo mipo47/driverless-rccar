@@ -114,7 +114,7 @@ class Model:
     @define_scope
     def input_images(self):
         num_images = (self._sqlen + self._args.lookback_length) * self._bsize
-        images = tf.map_fn(lambda x: tf.image.decode_jpeg(tf.read_file(x)),
+        images = tf.map_fn(lambda x: tf.image.decode_jpeg(tf.read_file(x), ratio=ds.RATIO),
                            tf.reshape(self._imfiles, shape=[num_images]),
                            dtype=tf.uint8)
         images.set_shape([None, ds.HEIGHT, ds.WIDTH, ds.CHANNELS])
@@ -136,8 +136,8 @@ class Model:
 
         net = slim.convolution(images,
                                num_outputs=64,
-                               kernel_size=[3, 12, 12],
-                               stride=[1, 6, 6],
+                               kernel_size=[3, 3, 3],
+                               stride=[1, 2, 2],
                                padding="VALID")
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
         # Height x Width x Channel
@@ -148,7 +148,7 @@ class Model:
 
         net = slim.convolution(net,
                                num_outputs=64,
-                               kernel_size=[2, 5, 5],
+                               kernel_size=[2, 3, 3],
                                stride=[1, 2, 2],
                                padding="VALID")
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
@@ -158,21 +158,21 @@ class Model:
                                                [bsize, sqlen, hwc]),
                                     128, activation_fn=None)
 
-        net = slim.convolution(net,
-                               num_outputs=64,
-                               kernel_size=[2, 5, 5],
-                               stride=[1, 1, 1],
-                               padding="VALID")
-        net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
-        # Height x Width x Channel
-        hwc = np.prod(net.get_shape().as_list()[2:])
-        aux3 = slim.fully_connected(tf.reshape(net[:, -sqlen:, :, :, :],
-                                               [bsize, sqlen, hwc]),
-                                    128, activation_fn=None)
+        # net = slim.convolution(net,
+        #                        num_outputs=64,
+        #                        kernel_size=[2, 5, 5],
+        #                        stride=[1, 1, 1],
+        #                        padding="VALID")
+        # net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
+        # # Height x Width x Channel
+        # hwc = np.prod(net.get_shape().as_list()[2:])
+        # aux3 = slim.fully_connected(tf.reshape(net[:, -sqlen:, :, :, :],
+        #                                        [bsize, sqlen, hwc]),
+        #                             128, activation_fn=None)
 
         net = slim.convolution(net,
                                num_outputs=64,
-                               kernel_size=[2, 5, 5],
+                               kernel_size=[2, 3, 3],
                                stride=[1, 1, 1],
                                padding="VALID")
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
@@ -186,9 +186,7 @@ class Model:
 
         net = slim.fully_connected(tf.reshape(net,
                                               [bsize, sqlen, hwc]),
-                                   1024, activation_fn=tf.nn.relu)
-        net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
-        net = slim.fully_connected(net, 512, activation_fn=tf.nn.relu)
+                                   512, activation_fn=tf.nn.relu)
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
         net = slim.fully_connected(net, 256, activation_fn=tf.nn.relu)
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
@@ -196,7 +194,7 @@ class Model:
 
         # aux[1-4] are residual connections (shortcuts)
         visual_features = _layer_norm(tf.nn.elu(
-            net + aux1 + aux2 + aux3 + aux4))
+            net + aux1 + aux2 + aux4))
 
         num_outputs = visual_features.get_shape().as_list()[-1]
         visual_features = tf.reshape(visual_features,

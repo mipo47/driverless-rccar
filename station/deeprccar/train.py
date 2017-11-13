@@ -16,7 +16,7 @@ import utils
 
 def do_epoch(sess, model, iterator, mode, epoch):
     total_steps = len(iterator)
-    total_loss = np.float128(0.0)
+    total_loss = np.float64(0.0)
     gt_next_state, au_next_state = None, None
     prefix_str = "{epoch:03d}/{epochs} {mode: <10} |{avrg_loss:.4f}| "
 
@@ -66,7 +66,7 @@ def do_epoch(sess, model, iterator, mode, epoch):
 
 
 def do_validation(sess, model, validation_iter, epoch, saver):
-    tot = np.float128(0.0)
+    tot = np.float64(0.0)
     loss, records = do_epoch(sess, model, validation_iter, "Validation", epoch)
     if do_validation.min_loss is None or do_validation.min_loss > loss:
         do_validation.min_loss = loss
@@ -115,6 +115,7 @@ def do_training():
     saver = tf.train.Saver()
     init = tf.global_variables_initializer()
     ckpt = tf.train.latest_checkpoint(args.checkpoint_dir)
+    # with tf.Session(config=tf.ConfigProto(device_count = {'GPU': 0})) as sess:
     with tf.Session() as sess:
         if ckpt:
             print("Restoring model from ", ckpt)
