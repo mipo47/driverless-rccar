@@ -12,24 +12,33 @@ APP_NAME = "stream"
 HOST = "0.0.0.0"
 PORT = 5000
 TIMEOUT = 5  # seconds
+SAVE_DATASET = False
 
-SPEED_NEUTRAL = 1420
-SPEED_MIN = 1000
-SPEED_MAX = 1800
-STEERING_NEUTRAL = 1400
+SPEED_NEUTRAL = 1415
+SPEED_MIN = 800
+SPEED_MAX = 1950
+STEERING_NEUTRAL = 1415
 STEERING_MIN = STEERING_NEUTRAL - 530  # right
 STEERING_MAX = STEERING_NEUTRAL + 530  # left
-TURN_AMOUNT = 0.005
+TURN_AMOUNT = 0.004
 ACCELERATE_AMOUNT = 0.002
 BRAKE_AMOUNT = ACCELERATE_AMOUNT
 
-def lerp(value, min, neutral, max):
+
+def lerp(value, min, neutral, max, value_min=-1.0, value_neutral=0.0, value_max=1.0):
+    value = value - value_neutral
+    if value >= 0.0:
+        value /= value_max - value_neutral
+    else:
+        value /= value_neutral - value_min
+
     result = neutral
     if value > 0:
         result = neutral * (1.0 - value) + max * value
     elif value < 0:
         result = neutral * (1.0 + value) + min * -value
     return np.clip(result, min, max)
+
 
 class Stream:
     def __init__(self):
@@ -45,6 +54,7 @@ class Stream:
         self.key_down = {}
 
         self.control = False
+        self.control_time = None
         self.speed = 0  # -1 to 1
         self.steering = 0  # -1 to 1
 
@@ -104,23 +114,30 @@ class Stream:
             self.control = False
 
         if self.control:
+            current_time = datetime.datetime.now().timestamp()
+            elapsed = current_time - self.control_time if self.control_time else 0.1
+            elapsed *= 1000
+
             if self.key_down['A']:
-                self.steering += TURN_AMOUNT / (1.0 + np.abs(self.speed))
+                self.steering += elapsed * TURN_AMOUNT / (1.0 + np.abs(self.speed*2))
             if self.key_down['D']:
-                self.steering -= TURN_AMOUNT / (1.0 + np.abs(self.speed))
+                self.steering -= elapsed * TURN_AMOUNT / (1.0 + np.abs(self.speed*2))
 
             if self.key_down['S']:
-                self.speed -= BRAKE_AMOUNT
+                self.speed -= elapsed * BRAKE_AMOUNT
             elif self.key_down['W']:
-                self.speed += ACCELERATE_AMOUNT
+                self.speed += elapsed * ACCELERATE_AMOUNT
 
             self.speed = np.clip(self.speed, -1.0, 1.0)
             self.steering = np.clip(self.steering, -1.0, 1.0)
 
-            self.steering *= 0.995
-            self.speed *= 0.995
+            self.steering *= 0.995 ** elapsed
+            self.speed *= 0.995 ** elapsed
 
-    def read_packet(self, conn, timeout, key_check=False):
+            self.control_time = current_time
+            # print(self.steering, self.speed)
+
+    def read_packet(self, conn, timeout, key_check=True):
         try:
             conn.setblocking(False)
         except:
@@ -202,7 +219,9 @@ class Stream:
             while len(timestamps) > 50:
                 timestamps.pop(0)
 
-            self.write_to_dataset(header, img, timestamp)
+            if SAVE_DATASET:
+                self.write_to_dataset(header, img, timestamp)
+
             Stream.draw(header, frame, fps)
 
     def write_to_dataset(self, header, image, timestamp):
@@ -247,6 +266,11 @@ class Stream:
                     "{:.0f}".format(fps), (10, 460),
                     cv2.FONT_HERSHEY_SIMPLEX, 1,
                     (255, 255, 255), 2, cv2.LINE_AA)
+
+        speed_cmd = int(lerp(int(header[1]), -180, 0, 250, SPEED_MIN, SPEED_NEUTRAL, SPEED_MAX))
+        steering_cmd = int(lerp(int(header[2]), -100, 0, 100, STEERING_MIN, STEERING_NEUTRAL, STEERING_MAX))
+        cv2.line(frame, (360, 300), (360 - steering_cmd, 300 - speed_cmd), (0, 255, 255), 3, cv2.LINE_AA)
+        cv2.line(frame, (360, 300), (360 - steering_cmd, 300 - speed_cmd), (0, 0, 0), 2, cv2.LINE_AA)
 
         cv2.imshow(APP_NAME, frame)
         cv2.waitKey(1)
