@@ -4,8 +4,10 @@ from stream_udp import Stream
 import pandas as pd
 
 PATH = 'datasets/X_2017-10-27_04_44_36'
+# PATH = 'datasets/Y_2017-10-27_04_53_53'
+RATIO = 1.0 # 1.0 / 8
 
-df = pd.read_csv(PATH + "/header.csv")[500:]
+df = pd.read_csv(PATH + "/header.csv")
 timestamps = []
 fps = 25.0
 
@@ -17,6 +19,7 @@ for index, row in df.iterrows():
         img = f.read()
     np_arr = np.frombuffer(img, dtype=np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    frame = cv2.resize(frame, None, fx=RATIO, fy=RATIO)
 
     timestamp = float(row["timestamp"])
     if len(timestamps) > 0:
