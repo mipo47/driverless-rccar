@@ -7,6 +7,7 @@ import csv
 import numpy as np
 
 import tensorflow as tf
+from tensorflow.python.client import timeline
 
 import dataset as ds
 from model import Model
@@ -22,6 +23,7 @@ def do_epoch(sess, model, iterator, mode, epoch):
 
     records = {}
     for step, batch in enumerate(iterator):
+        # print("train step", step)
         imfiles, commands = batch
         feed_list = [imfiles, commands, args.sequence_length,
                      args.batch_size, args.keep_prob]
@@ -33,11 +35,21 @@ def do_epoch(sess, model, iterator, mode, epoch):
             feed_dict.update({model.autoregressive_prev_state: au_next_state})
 
         if mode == "Training":
+            # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            # run_metadata = tf.RunMetadata()
+
             au_next_state, gt_next_state, loss, _ = sess.run(
                 [model.autoregressive_next_state,
                  model.ground_truth_next_state,
                  model.loss,
-                 model.optimization], feed_dict=feed_dict)
+                 model.optimization], feed_dict=feed_dict) #, options=options, run_metadata=run_metadata)
+
+            # Create the Timeline object, and write it to a json file
+            # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+            # chrome_trace = fetched_timeline.generate_chrome_trace_format()
+            # with open('timeline_01.json', 'w') as f:
+            #     f.write(chrome_trace)
+            # break
         elif mode == "Validation":
             # Keep probability is 1.0 for validation
             feed_dict.update({model.placeholders[-1]: 1.0})

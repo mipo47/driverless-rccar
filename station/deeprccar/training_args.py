@@ -10,9 +10,9 @@ def _get_arguments():
     parser.add_argument("--checkpoint_dir",
                         default="/tmp/deeprccar",
                         help="Directory to save training files")
-    parser.add_argument("--batch_size", type=int, default=5,
+    parser.add_argument("--batch_size", type=int, default=4,
                         help="Minibatch size")
-    parser.add_argument("--lookback_length", type=int, default=4,
+    parser.add_argument("--lookback_length", type=int, default=5,
                         help="The number of images from the past")
     parser.add_argument("--sequence_length", type=int, default=10,
                         help="Sequence length for RNNs")

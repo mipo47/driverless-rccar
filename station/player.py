@@ -3,11 +3,13 @@ import numpy as np
 from stream_udp import Stream
 import pandas as pd
 
-PATH = 'datasets/X_2017-10-27_04_44_36'
-# PATH = 'datasets/Y_2017-10-27_04_53_53'
+# PATH = 'datasets/maxima/21784'
+# PATH = 'datasets/maxima/17947'
+PATH = 'datasets/maxima/10816'
+
 RATIO = 1.0 # 1.0 / 8
 
-df = pd.read_csv(PATH + "/header.csv")
+df = pd.read_csv(PATH + "/filtered.csv")
 timestamps = []
 fps = 25.0
 
@@ -23,7 +25,7 @@ for index, row in df.iterrows():
 
     timestamp = float(row["timestamp"])
     if len(timestamps) > 0:
-        fps = len(timestamps) / (timestamp - timestamps[0] + 1e-6)
+        fps = 1000 * len(timestamps) / (timestamp - timestamps[0] + 1e-6)
 
     timestamps.append(timestamp)
     while len(timestamps) > 50:

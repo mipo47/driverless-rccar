@@ -29,9 +29,11 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private static final int MAX_QUEUE_SIZE = 2;
     private static final int BUFFER_COUNT = MAX_QUEUE_SIZE * 2 + 1;
 
-    public int jpegQuality = 10;
+    public int jpegQuality = 70;
     public String flashMode;
     public UdpClient tcpClient;
+
+    private AvcEncoder encoder;
 
     public CameraPreview(Context context, Camera camera) {
         super(context);
@@ -66,7 +68,6 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
         flashMode = params.getFlashMode();
 
-
 //        if (params.isAutoExposureLockSupported() )
 //            params.setAutoExposureLock(true);
 
@@ -79,6 +80,9 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         mCamera.getParameters().getPreviewFpsRange(fpsRange);
         Log.d(TAG, "Fps Range is set to " + fpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX] +
                 ", " + fpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX]);
+
+        this.encoder = new AvcEncoder();
+        this.encoder.init(size.width, size.height, 15, 500000);
     }
 
     @Override
@@ -213,6 +217,15 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 //            jpegQuality = (int) Math.round(2 + Math.pow(tcpClient.sendProbability, 2) * 98);
 //            Log.d(TAG, "changing JPEG quality to " + jpegQuality);
 //        }
+
+        /* Uncomment to enable video stream */
+//        byte[] encData = null;
+//        do {
+//            encData = this.encoder.offerEncoder(preview);
+//        } while (encData == null || encData.length == 0);
+//
+//        Log.d(TAG, "Frame captured, size: " + encData.length);
+//        return encData;
 
         byte[] jpeg = null;
         YuvImage image = new YuvImage(preview, ImageFormat.NV21, width, height, null);

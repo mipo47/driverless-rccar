@@ -6,6 +6,7 @@ import android.os.Message;
 import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
+import java.io.Console;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -18,9 +19,12 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.util.Date;
 
 public class UdpClient {
     private static final String TAG = "UdpClient";
+
+    public static final long PING_TIMEOUT = 5000; // expect ping command at least once per 5 seconds
 
     // Message types sent from the TcpClient to activities
     public static final int MESSAGE_CONNECTION_STATE_CHANGE = 0;
@@ -39,6 +43,7 @@ public class UdpClient {
     public static final int STATE_CONNECTED = 2;  // now connected to the server
 
     public float sendProbability = 0.1f;
+    public Date pingDate = new Date();
 
     private ConnectThread mConnectThread = null;
     private ReaderThread mReaderThread = null;
@@ -49,6 +54,7 @@ public class UdpClient {
     private int mNewState;
 
     private InetAddress mAddress;
+    private int mAddressPort;
     private int mPort;
 
     public UdpClient(Handler handler) {
@@ -72,14 +78,8 @@ public class UdpClient {
         return mState;
     }
 
-    public synchronized void connect(String ip, int port) {
-        Log.d(TAG, "Connecting to: " + ip + ":" + port);
-        try {
-            mAddress = InetAddress.getByName(ip);
-        } catch (UnknownHostException exc) {
-            Log.e(TAG, "Cannot connect", exc);
-            return;
-        }
+    public synchronized void connect(int port) {
+        Log.d(TAG, "Waiting connection, port: " + port);
         mPort = port;
 
         // Cancel any thread attempting to make a connection
@@ -99,7 +99,7 @@ public class UdpClient {
         }
 
         // Start the thread to connect with the given device
-        mConnectThread = new ConnectThread(ip, port);
+        mConnectThread = new ConnectThread(port);
         mConnectThread.start();
         notifyStateChange();
     }
@@ -142,8 +142,7 @@ public class UdpClient {
     }
 
     private synchronized void connected(DatagramSocket socket) {
-        String serverAddress = mAddress.toString();
-        Log.d(TAG, "Connected to " + serverAddress);
+        Log.d(TAG, "Start read/write threads, port: " + mPort);
 
         // Cancel the thread that completed the connection
         if (mConnectThread != null) {
@@ -166,14 +165,6 @@ public class UdpClient {
 
         mReaderThread = new ReaderThread(socket);
         mReaderThread.start();
-
-        // Send the name of the connected device back
-        Message msg = mHandler.obtainMessage(MESSAGE_CONNECTION_ESTABLISHED);
-        Bundle bundle = new Bundle();
-        bundle.putString(SERVER_ADDRESS, serverAddress);
-        msg.setData(bundle);
-        mHandler.sendMessage(msg);
-        notifyStateChange();
     }
 
     private void connectionFailed() {
@@ -196,17 +187,15 @@ public class UdpClient {
         msg.setData(bundle);
         mHandler.sendMessage(msg);
 
-        mState = STATE_NONE;
+        mState = STATE_CONNECTING;
         notifyStateChange();
     }
 
     private class ConnectThread extends Thread {
-        String mmIP;
         int mmPort;
         DatagramSocket mmSocket;
 
-        public ConnectThread(String ip, int port) {
-            mmIP = ip;
+        public ConnectThread(int port) {
             mmPort = port;
         }
 
@@ -215,9 +204,9 @@ public class UdpClient {
             super.run();
 
             try {
-                mmSocket = new DatagramSocket();
+                mmSocket = new DatagramSocket(mmPort);
             } catch (IOException e) {
-                Log.e(TAG, "Failed to connect to " + mmIP + ":" + mmPort, e);
+                Log.e(TAG, "Failed to listen port " + mmPort, e);
                 connectionFailed();
                 // Close the socket
                 mmSocket.close();
@@ -247,9 +236,9 @@ public class UdpClient {
         public ReaderThread(DatagramSocket socket) {
             Log.d(TAG, "create ReaderThread");
             mmSocket = socket;
-            mState = STATE_CONNECTED;
             mmStringBuilder = new StringBuilder();
             mmValid = false;
+            mState = STATE_CONNECTING;
         }
 
         @Override
@@ -260,12 +249,30 @@ public class UdpClient {
             byte[] receiveData = new byte[1024];
             int c;
             // Keep listening to the InputStream while connected
-            while (mState == STATE_CONNECTED) {
+            while (mState == STATE_CONNECTED || mState == STATE_CONNECTING) {
                 try {
                     // Read from the InputStream
                     // "[<throttle_cmd>;<steering_cmd>]"
                     DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                     mmSocket.receive(receivePacket);
+                    if (receivePacket.getLength() > 0) {
+                        InetAddress address = receivePacket.getAddress();
+                        int port = receivePacket.getPort();
+                        if (!address.equals(mAddress) || port != mAddressPort) {
+                            mAddress = address;
+                            mAddressPort = port;
+                            Log.d(TAG, "New client connected from " + mAddress);
+                            mState = STATE_CONNECTED;
+
+                            // Send the name of the connected device back
+                            Message msg = mHandler.obtainMessage(MESSAGE_CONNECTION_ESTABLISHED);
+                            Bundle bundle = new Bundle();
+                            bundle.putString(SERVER_ADDRESS, mAddress.toString() + ":" + mAddressPort);
+                            msg.setData(bundle);
+                            mHandler.sendMessage(msg);
+                            notifyStateChange();
+                        }
+                    }
                     for (int i = 0; i < receivePacket.getLength(); i++) {
                         c = receiveData[i];
                         if (c == '[') {
@@ -316,25 +323,45 @@ public class UdpClient {
         public WriterThread(DatagramSocket socket) {
             Log.d(TAG, "create WriterThread");
             mmSocket = socket;
-            mmByteOutput = new ByteArrayOutputStream(200000);
+            mmByteOutput = new ByteArrayOutputStream(510000);
             mmOutStream = new DataOutputStream(mmByteOutput);
         }
 
         @Override
         public void run() {
             super.run();
+
+            Log.d(TAG, "WriterThread waiting for connection");
+            while (mState == STATE_NONE) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException exc) {}
+            }
+
             Log.i(TAG, "BEGIN WriterThread");
             setName("WriterThread");
             int c;
             // Keep listening to the InputStream while connected
-            while (mState == STATE_CONNECTED) {
-                TcpOutput tcpOutput = null;
-                if (mOut != null) {
-                    tcpOutput = mOut;
-                    mOut = null;
-                }
-                if (tcpOutput != null) {
-                    send(tcpOutput);
+            while (mState != STATE_NONE) {
+                if (mState == STATE_CONNECTED) {
+                    if (new Date().getTime() - pingDate.getTime() > PING_TIMEOUT) {
+                        mState = STATE_CONNECTING;
+                        notifyStateChange();
+                    }
+                    else {
+                        TcpOutput tcpOutput = null;
+                        if (mOut != null) {
+                            tcpOutput = mOut;
+                            mOut = null;
+                        }
+                        if (tcpOutput != null) {
+                            send(tcpOutput);
+                        }
+                    }
+                } else {
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException exc) {}
                 }
             }
         }
@@ -354,7 +381,7 @@ public class UdpClient {
 
                 byte[] sendData = mmByteOutput.toByteArray();
                 mmByteOutput.reset();
-                DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, mAddress, mPort);
+                DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, mAddress, mAddressPort);
                 mmSocket.send(sendPacket);
 
                 mHandler.obtainMessage(MESSAGE_SEND, -1, -1, out).sendToTarget();

@@ -15,6 +15,7 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 
+import java.util.Date;
 import java.util.List;
 
 public class AcquisitionActivity extends AppCompatActivity {
@@ -30,12 +31,14 @@ public class AcquisitionActivity extends AppCompatActivity {
 
     private UsbManager mUsbManager;
     public UsbClient mUsbClient;
-    private UdpClient mTcpClient;
+    public UdpClient mTcpClient;
 
     // Can be used to reconnect
     private UsbSerialPort mUsbSerialPort = null;
     private String mIP = null;
     private int mPort;
+
+    private FileSaver mFileSaver = new FileSaver();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -121,7 +124,7 @@ public class AcquisitionActivity extends AppCompatActivity {
                         final List<UsbSerialPort> ports = driver.getPorts();
                         for (final UsbSerialPort usbPort : ports) {
                             String portAddress = "COM" + usbPort.getPortNumber();
-                            if (portAddress.equals(address)) {
+                            if (true || portAddress.equals(address)) {
                                 mUsbSerialPort = usbPort;
                                 break;
                             }
@@ -139,7 +142,7 @@ public class AcquisitionActivity extends AppCompatActivity {
                 }
                 if (mTcpClient.getState() == TcpClient.STATE_NONE) {
                     Log.d(TAG, "Connecting to server at " + mIP + ":" + mPort);
-                    mTcpClient.connect(mIP, mPort);
+                    mTcpClient.connect(mPort);
                 }
                 startStreaming();
             } else {
@@ -169,10 +172,14 @@ public class AcquisitionActivity extends AppCompatActivity {
 
         @Override
         protected void onReceived(ArduinoInput arduinoInput) {
+            arduinoInput.isOnline = true;
             Log.d(TAG, "(Serial) onReceived: " + arduinoInput.toString());
-            if (mTcpClient.getState() == TcpClient.STATE_CONNECTED && mCameraPreview.getPreviewCount() > 0) {
-                arduinoInput.isOnline = true;
-                mTcpClient.send(arduinoInput, androidInput);
+            if (mCameraPreview.getPreviewCount() > 0) {
+                if (mTcpClient.getState() == TcpClient.STATE_CONNECTED) {
+                    mTcpClient.send(arduinoInput, androidInput);
+                } else {
+                    mFileSaver.save(arduinoInput, androidInput);
+                }
             }
         }
 
@@ -219,8 +226,10 @@ public class AcquisitionActivity extends AppCompatActivity {
 
         @Override
         protected void onReceived(TcpInput input) {
-            Log.d(TAG, "Running command " + input.command);
-            input.command.run(AcquisitionActivity.this);
+            if (input.command != null) {
+                Log.d(TAG, "Running command " + input.command);
+                input.command.run(AcquisitionActivity.this);
+            }
         }
 
         @Override
@@ -256,7 +265,7 @@ public class AcquisitionActivity extends AppCompatActivity {
             // try to reconnect each 2 seconds
             if (millisUntilFinished % 2000 == 0) {
                 if (mIP != null && mTcpClient.getState() == TcpClient.STATE_NONE) {
-                    mTcpClient.connect(mIP, mPort);
+                    mTcpClient.connect(mPort);
                 }
 
                 if (mUsbSerialPort != null && mUsbClient.getState() == UsbClient.STATE_NONE) {

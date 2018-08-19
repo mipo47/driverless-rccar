@@ -21,7 +21,10 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -35,6 +38,33 @@ public class ConnectionActivity extends AppCompatActivity {
     private static final int REQUEST_ENABLE_BT = 0;
     private String mBluetoothAddress = null;
     private UsbManager mUsbManager = null;
+
+    public static String getIPAddress(boolean useIPv4) {
+        try {
+            List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface intf : interfaces) {
+                List<InetAddress> addrs = Collections.list(intf.getInetAddresses());
+                for (InetAddress addr : addrs) {
+                    if (!addr.isLoopbackAddress()) {
+                        String sAddr = addr.getHostAddress();
+                        //boolean isIPv4 = InetAddressUtils.isIPv4Address(sAddr);
+                        boolean isIPv4 = sAddr.indexOf(':')<0;
+
+                        if (useIPv4) {
+                            if (isIPv4)
+                                return sAddr;
+                        } else {
+                            if (!isIPv4) {
+                                int delim = sAddr.indexOf('%'); // drop ip6 zone suffix
+                                return delim<0 ? sAddr.toUpperCase() : sAddr.substring(0, delim).toUpperCase();
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ex) { } // for now eat exceptions
+        return "";
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,7 +83,10 @@ public class ConnectionActivity extends AppCompatActivity {
         Button buttonConnect = (Button) findViewById(R.id.button_connect);
         buttonConnect.setOnClickListener(mConnectClickListener);
 
-//        buttonConnect.callOnClick();
+        EditText editTextIp = (EditText) findViewById(R.id.edit_text_ip);
+        editTextIp.setText(getIPAddress(true));
+
+        buttonConnect.callOnClick();
     }
 
     @Override
@@ -91,7 +124,12 @@ public class ConnectionActivity extends AppCompatActivity {
         if (pairedDevices.size() > 0) {
             // There are paired devices.
             for (UsbSerialPort port : pairedDevices) {
-                list.add("COM" + port.getPortNumber());
+                String usbPort = "COM" + port.getPortNumber();
+                list.add(usbPort);
+                mBluetoothAddress = usbPort;
+                textViewBluetoothAddress.setText(mBluetoothAddress);
+//                Button buttonConnect = (Button) findViewById(R.id.button_connect);
+//                buttonConnect.callOnClick();
             }
 
             final ArrayAdapter<String> adapter = new ArrayAdapter<>(this,

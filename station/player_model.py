@@ -7,11 +7,10 @@ from collections import deque
 
 CHECKPOINT_DIR = '/tmp/deeprccar'
 METAGRAPH_FILE = CHECKPOINT_DIR + '/deeprccar-model.meta'
-PATH = 'datasets/X_2017-10-27_04_44_36'
-# PATH = 'datasets/Y_2017-10-27_04_53_53'
-RATIO = 1.0 / 8
+PATH = 'datasets/maxima/10816'
+RATIO = 1.0 / 4
 
-df = pd.read_csv(PATH + "/header.csv")
+df = pd.read_csv(PATH + "/filtered.csv")
 timestamps = []
 fps = 25.0
 

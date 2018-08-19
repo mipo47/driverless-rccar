@@ -11,6 +11,8 @@ from tensorflow.python.util import nest
 
 import dataset as ds
 
+CONV_OUTPUTS = 36
+
 
 def doublewrap(function):
     """
@@ -135,9 +137,9 @@ class Model:
                                            ds.HEIGHT, ds.WIDTH, ds.CHANNELS])
 
         net = slim.convolution(images,
-                               num_outputs=64,
-                               kernel_size=[3, 3, 3],
-                               stride=[1, 2, 2],
+                               num_outputs=CONV_OUTPUTS,
+                               kernel_size=[3, 10, 10],
+                               stride=[1, 5, 5],
                                padding="VALID")
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
         # Height x Width x Channel
@@ -147,8 +149,8 @@ class Model:
                                     128, activation_fn=None)
 
         net = slim.convolution(net,
-                               num_outputs=64,
-                               kernel_size=[2, 3, 3],
+                               num_outputs=CONV_OUTPUTS,
+                               kernel_size=[2, 5, 5],
                                stride=[1, 2, 2],
                                padding="VALID")
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
@@ -158,21 +160,21 @@ class Model:
                                                [bsize, sqlen, hwc]),
                                     128, activation_fn=None)
 
-        # net = slim.convolution(net,
-        #                        num_outputs=64,
-        #                        kernel_size=[2, 5, 5],
-        #                        stride=[1, 1, 1],
-        #                        padding="VALID")
-        # net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
-        # # Height x Width x Channel
-        # hwc = np.prod(net.get_shape().as_list()[2:])
-        # aux3 = slim.fully_connected(tf.reshape(net[:, -sqlen:, :, :, :],
-        #                                        [bsize, sqlen, hwc]),
-        #                             128, activation_fn=None)
+        net = slim.convolution(net,
+                               num_outputs=CONV_OUTPUTS,
+                               kernel_size=[2, 5, 5],
+                               stride=[1, 1, 1],
+                               padding="VALID")
+        net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
+        # Height x Width x Channel
+        hwc = np.prod(net.get_shape().as_list()[2:])
+        aux3 = slim.fully_connected(tf.reshape(net[:, -sqlen:, :, :, :],
+                                               [bsize, sqlen, hwc]),
+                                    128, activation_fn=None)
 
         net = slim.convolution(net,
-                               num_outputs=64,
-                               kernel_size=[2, 3, 3],
+                               num_outputs=CONV_OUTPUTS,
+                               kernel_size=[2, 5, 5],
                                stride=[1, 1, 1],
                                padding="VALID")
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
@@ -186,7 +188,9 @@ class Model:
 
         net = slim.fully_connected(tf.reshape(net,
                                               [bsize, sqlen, hwc]),
-                                   512, activation_fn=tf.nn.relu)
+                                   1024, activation_fn=tf.nn.relu)
+        net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
+        net = slim.fully_connected(net, 512, activation_fn=tf.nn.relu)
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
         net = slim.fully_connected(net, 256, activation_fn=tf.nn.relu)
         net = tf.nn.dropout(x=net, keep_prob=self._keep_prob)
@@ -194,7 +198,7 @@ class Model:
 
         # aux[1-4] are residual connections (shortcuts)
         visual_features = _layer_norm(tf.nn.elu(
-            net + aux1 + aux2 + aux4))
+            net + aux1 + aux2 + aux3 + aux4))
 
         num_outputs = visual_features.get_shape().as_list()[-1]
         visual_features = tf.reshape(visual_features,

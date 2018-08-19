@@ -11,7 +11,7 @@ IMAGE_FOLDER = None
 COMMAND_NAMES = ['steering', 'speed']  # steering_cmd, speed_cmd
 NUM_COMMANDS = len(COMMAND_NAMES)
 
-RATIO = 8  # downscaling ration from 720x480 to 90x60
+RATIO = 4  # downscaling ration from 720x480 to 180x120
 HEIGHT = int(480 / RATIO)
 WIDTH = int(720 / RATIO)
 CHANNELS = 3  # RGB
